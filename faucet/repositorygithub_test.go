@@ -34,7 +34,7 @@ const (
 type namesStub struct {
 	url    string
 	client *http.Client
-	// arrived gets a value when a request that hangs arrives.
+	// arrived gets a value when a request that hangs or is held arrives.
 	arrived chan struct{}
 
 	mu      sync.Mutex
@@ -49,6 +49,8 @@ type githubAnswer struct {
 	body   []byte
 	// hang makes the stub answer nothing until faucet gives up.
 	hang bool
+	// release, when set, holds the answer back until it is closed.
+	release chan struct{}
 }
 
 func newNamesStub(t *testing.T) *namesStub {
@@ -68,13 +70,15 @@ func newNamesStub(t *testing.T) *namesStub {
 		if !ok || r.Method != http.MethodGet {
 			answer = notFound
 		}
-		if answer.hang {
+		if answer.hang || answer.release != nil {
 			g.arrived <- struct{}{}
 			select {
 			case <-r.Context().Done():
+				return
 			case <-released:
+				return
+			case <-answer.release:
 			}
-			return
 		}
 		for k, v := range answer.header {
 			w.Header()[k] = v
@@ -212,9 +216,9 @@ func lifecycleBodyOf(id int64, action, fullName string, ownerID int64, changes s
 // GitHub signs a delivery's body and nothing else, so whoever kept a body can
 // send it again under a new delivery GUID after the account that it names was
 // renamed. The replay must not give the account its former login back, so
-// that a grant of a repository under that login stays without access, whether
-// GitHub answers, has no such account, limits faucet's rate, or answers
-// nothing.
+// that a grant of a repository under that login stays without access. When
+// GitHub has no such account, limits faucet's rate or answers nothing, faucet
+// cannot tell the replay from a rename, so the account holds neither login.
 func TestAReplayedDeliveryGivesAnAccountNoFormerLoginBack(t *testing.T) {
 	t.Parallel()
 	kept := pushNaming(70, coderOrgID, "coder-legacy/tap")
@@ -245,20 +249,25 @@ func TestAReplayedDeliveryGivesAnAccountNoFormerLoginBack(t *testing.T) {
 				requireAcknowledged(t, handler, "push", "d-3", kept)
 			}
 			requireUnbound(t, store, "coder-legacy/tap")
-			requireOwner(t, store, "coder", coderOrgID)
 			requireNoOwner(t, store, "coder-legacy")
-			requireBoundTo(t, store, "coder/tap", faucet.Repository{ID: 70, OwnerID: coderOrgID, OwnerLogin: "coder", FullName: "coder/tap"})
 			require.Equal(t, 2, github.askedFor(userPath(coderOrgID)), "faucet asks GitHub before it moves a login")
+			if name != "GitHubNamesTheCurrentLogin" {
+				requireNoOwner(t, store, "coder")
+				requireUnbound(t, store, "coder/tap")
+				return
+			}
+			requireOwner(t, store, "coder", coderOrgID)
+			requireBoundTo(t, store, "coder/tap", faucet.Repository{ID: 70, OwnerID: coderOrgID, OwnerLogin: "coder", FullName: "coder/tap"})
 		})
 	}
 }
 
 // An account that GitHub renamed takes its new login once GitHub, asked for
-// the account's ID, gives it. Until GitHub answers, it keeps the login that it
-// had, and faucet asks about one account at most once a minute, so a flood of
-// deliveries cannot spend the 60 requests an hour that GitHub allows a client
-// with no token. When GitHub gives another login than the delivery, GitHub's
-// wins.
+// the account's ID, gives it. Until GitHub answers, the account holds no
+// login, the old one included, and faucet asks about one account at most once
+// a minute, so a flood of deliveries cannot spend the 60 requests an hour
+// that GitHub allows a client with no token. When GitHub gives another login
+// than the delivery, GitHub's wins.
 func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 	t.Parallel()
 	github := newNamesStub(t)
@@ -268,11 +277,13 @@ func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 
 	github.answer(userPath(coderOrgID), rateLimited())
 	requireAcknowledged(t, handler, "push", "d-2", pushNaming(70, coderOrgID, "coder/tap"))
-	requireOwner(t, store, "coder-legacy", coderOrgID)
+	requireNoOwner(t, store, "coder-legacy")
+	requireNoOwner(t, store, "coder")
+	requireUnbound(t, store, "coder-legacy/tap")
 
 	github.answer(userPath(coderOrgID), recorded(t, "user_95932066.json"))
 	requireAcknowledged(t, handler, "push", "d-3", pushNaming(70, coderOrgID, "coder/tap"))
-	requireOwner(t, store, "coder-legacy", coderOrgID)
+	requireNoOwner(t, store, "coder")
 	require.Equal(t, 1, github.askedFor(userPath(coderOrgID)), "faucet asks about an account at most once a minute")
 
 	clock.Advance(time.Minute)
@@ -285,7 +296,8 @@ func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 // One login names one account. A delivery that names an account under a
 // login that faucet holds for another account moves the login only when
 // GitHub gives it to the delivered account, so a kept delivery of the account
-// that gave the login up does not take it back.
+// that gave the login up does not take it back. Until GitHub answers, no
+// account holds the login.
 func TestALoginMovesToAnotherAccountOnlyWhenGitHubGivesItThere(t *testing.T) {
 	t.Parallel()
 	const formerID int64 = 1001
@@ -295,7 +307,8 @@ func TestALoginMovesToAnotherAccountOnlyWhenGitHubGivesItThere(t *testing.T) {
 	requireAcknowledged(t, handler, "push", "d-1", kept)
 
 	requireAcknowledged(t, handler, "push", "d-2", pushNaming(81, thomasID, "ThomasK33/faucet"))
-	requireOwner(t, store, "ThomasK33", formerID)
+	requireNoOwner(t, store, "ThomasK33")
+	requireUnbound(t, store, "ThomasK33/dotfiles")
 
 	github.answer(userPath(thomasID), recorded(t, "user_2198487.json"))
 	clock.Advance(time.Minute)
@@ -387,4 +400,81 @@ func TestAKeptTransferGivesAPublicRepositoryNoNameBack(t *testing.T) {
 		requireBoundTo(t, store, "coder/superblink-events", atCoder)
 		requireUnbound(t, store, "acme/superblink-events")
 	}
+}
+
+// While an account holds no login because GitHub did not confirm one, every
+// delivery that names it asks GitHub again, at most once a minute, whatever
+// login it carries, and GitHub's answer gives the account its login back.
+func TestAQuarantinedAccountHealsOnTheNextDeliveryAfterGitHubAnswers(t *testing.T) {
+	t.Parallel()
+	for name, login := range map[string]string{"UnderTheOldLogin": "coder-legacy", "UnderTheNewLogin": "coder", "UnderAnotherLogin": "coder-next"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			github := newNamesStub(t)
+			store, clock, handler := newRepositoryHarness(t, askingGitHub(github))
+			requireAcknowledged(t, handler, "push", "d-1", pushNaming(70, coderOrgID, "coder-legacy/tap"))
+			github.answer(userPath(coderOrgID), rateLimited())
+			requireAcknowledged(t, handler, "push", "d-2", pushNaming(70, coderOrgID, "coder/tap"))
+			requireNoOwner(t, store, "coder")
+			requireNoOwner(t, store, "coder-legacy")
+
+			github.answer(userPath(coderOrgID), recorded(t, "user_95932066.json"))
+			clock.Advance(time.Minute)
+			requireAcknowledged(t, handler, "push", "d-3", pushNaming(70, coderOrgID, login+"/tap"))
+			requireOwner(t, store, "coder", coderOrgID)
+			requireBoundTo(t, store, "coder/tap", faucet.Repository{ID: 70, OwnerID: coderOrgID, OwnerLogin: "coder", FullName: "coder/tap"})
+			requireUnbound(t, store, "coder-legacy/tap")
+		})
+	}
+}
+
+// serveAsync serves a delivery in its own goroutine.
+func serveAsync(handler http.Handler, event, delivery string, body []byte) <-chan *httptest.ResponseRecorder {
+	served := make(chan *httptest.ResponseRecorder, 1)
+	go func() { served <- serveWebhook(handler, newRequest(http.MethodPost, body, event, delivery)) }()
+	return served
+}
+
+// Two deliveries that rename or transfer one repository can ask GitHub at
+// once, and the one that asked first can get the older names. faucet writes
+// GitHub's answers for one repository in the order in which it asked, so an
+// older answer never replaces a newer one.
+func TestAnOlderAnswerFromGitHubNeverReplacesANewerOne(t *testing.T) {
+	t.Parallel()
+	github := newNamesStub(t)
+	store, _, handler := newRepositoryHarness(t, askingGitHub(github))
+	requireAcknowledged(t, handler, "push", "d-1", pushNaming(publicRepoID, coderOrgID, "coder/superblink-events"))
+
+	release := make(chan struct{})
+	before := recorded(t, "repositories_public.json")
+	before.release = release
+	github.answer(repoPath(publicRepoID), before)
+	kept := serveAsync(handler, "repository", "d-2", lifecycleBodyOf(publicRepoID, "renamed", "coder/superblink-events", coderOrgID, renamedFromName("faucet")))
+	select {
+	case <-github.arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("faucet did not ask GitHub")
+	}
+
+	github.answer(repoPath(publicRepoID), githubRepository(t, publicRepoID, acmeID, "acme/superblink-events"))
+	transfer := serveAsync(handler, "repository", "d-3", lifecycleBodyOf(publicRepoID, "transferred", "acme/superblink-events", acmeID, transferredFromOrg("coder")))
+	var transferred *httptest.ResponseRecorder
+	select {
+	case transferred = <-transfer:
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	for _, served := range []<-chan *httptest.ResponseRecorder{kept, transfer} {
+		if served == transfer && transferred != nil {
+			continue
+		}
+		select {
+		case rec := <-served:
+			require.Less(t, rec.Code, 300, rec.Body.String())
+		case <-time.After(10 * time.Second):
+			t.Fatal("a delivery did not end")
+		}
+	}
+	requireBoundTo(t, store, "acme/superblink-events", faucet.Repository{ID: publicRepoID, OwnerID: acmeID, OwnerLogin: "acme", FullName: "acme/superblink-events"})
+	requireUnbound(t, store, "coder/superblink-events")
 }
