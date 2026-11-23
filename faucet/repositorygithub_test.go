@@ -32,8 +32,9 @@ const (
 // token, for the login of an account and the names of a repository. A path
 // that it was not given answers as GitHub answers for a private repository.
 type namesStub struct {
-	url     string
-	client  *http.Client
+	url    string
+	client *http.Client
+	// arrived gets a value when a request that hangs arrives.
 	arrived chan struct{}
 
 	mu      sync.Mutex
@@ -67,8 +68,8 @@ func newNamesStub(t *testing.T) *namesStub {
 		if !ok || r.Method != http.MethodGet {
 			answer = notFound
 		}
-		g.arrived <- struct{}{}
 		if answer.hang {
+			g.arrived <- struct{}{}
 			select {
 			case <-r.Context().Done():
 			case <-released:

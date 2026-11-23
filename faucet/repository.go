@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"sync"
 
 	"golang.org/x/xerrors"
 
@@ -21,9 +20,9 @@ var ErrUnknownRepository = xerrors.New("no delivery has named the repository")
 // repository of the owner.
 var ErrUnknownOwner = xerrors.New("no delivery has named a repository of the owner")
 
-// Owner is the user or organization that owns a repository, as the signed
-// delivery that the store saw latest names it. GitHub keeps ID when the
-// account is renamed, and Login can later name another account.
+// Owner is the user or organization that owns a repository, with the login
+// that GitHub gave it latest as far as the store knows. GitHub keeps ID when
+// the account is renamed, and Login can later name another account.
 type Owner struct {
 	ID    int64
 	Login string
@@ -92,8 +91,8 @@ const (
 	Renamed RenameOutcome = iota + 1
 	// RenameQuarantined means the store held another name: a rename before
 	// this one never reached it, or this one is an old body sent again, and
-	// the store cannot tell which. The repository resolves no name until a
-	// fresh rename from the name that the store holds.
+	// the store cannot tell which. The repository resolves no name until
+	// GitHub names it (Store.ConfirmRepository).
 	RenameQuarantined
 	// RenameLate means the rename was late and the store held another name,
 	// which a newer rename can have given, so it changed nothing.
@@ -105,15 +104,15 @@ const (
 
 // recordRepository records the repository and the organization that a
 // signed delivery names, so a service can be granted them by name before
-// faucet stores an event of them, and so the login of each account follows
-// its latest delivery. A delivery that redelivery asked GitHub to send again
-// names the accounts as they were when it first came, so it adds an account
-// that the store lacks and moves no login. Only a repository event that
-// renames or transfers a repository changes the names of a repository that
-// the store knows (Store.RenameRepository). A failed write of such an event
-// fails the delivery, so that GitHub records the failure and redelivery asks
-// for it again. Any other failed write is logged, and the delivery goes on:
-// the next one that names the accounts writes them.
+// faucet stores an event of them. GitHub signs the body of a delivery and
+// nothing else, and gives it no time, so a body that someone kept and sends
+// again under a new delivery GUID cannot be told from a fresh one. A delivery
+// therefore adds what the store lacks, but it changes a name that the store
+// holds only to the one that GitHub, asked for the ID, gives now (recordOwner,
+// renameRepository). A failed write of a rename or transfer fails the
+// delivery, so that GitHub records the failure and redelivery asks for it
+// again. Any other failed write is logged, and the delivery goes on: the next
+// one that names the accounts writes them.
 func (s *Service) recordRepository(ctx context.Context, logger slog.Logger, eventName, deliveryID string, payload []byte) error {
 	named, hasRepo := repositoryOf(eventName, payload)
 	var owners []Owner
@@ -123,9 +122,10 @@ func (s *Service) recordRepository(ctx context.Context, logger slog.Logger, even
 	if hasRepo && !slices.ContainsFunc(owners, func(o Owner) bool { return o.ID == named.repo.OwnerID }) {
 		owners = append(owners, Owner{ID: named.repo.OwnerID, Login: named.repo.OwnerLogin})
 	}
-	replay := sync.OnceValue(func() bool { return s.replayed(ctx, logger, deliveryID) })
+	asks := s.names.asks(ctx)
+	defer asks.done()
 	for _, owner := range owners {
-		s.recordOwner(ctx, logger, owner, replay)
+		s.recordOwner(ctx, logger, owner, asks)
 	}
 	switch {
 	case !hasRepo:
@@ -136,14 +136,45 @@ func (s *Service) recordRepository(ctx context.Context, logger slog.Logger, even
 		}
 		return nil
 	}
-	rename := RepositoryRename{Repo: named.repo, From: named.previous, Body: sha256.Sum256(payload), Late: replay()}
+	return s.renameRepository(ctx, logger, deliveryID, RepositoryRename{Repo: named.repo, From: named.previous, Body: sha256.Sum256(payload)}, asks)
+}
+
+// renameRepository applies a repository event that renamed or transferred a
+// repository, and asks GitHub once for each body that the store has not
+// judged. GitHub names a public repository, and the store takes GitHub's
+// names, not the body's. GitHub names no private repository to a client with
+// no token, and may not answer at all. Then the store judges the body by the
+// name that it holds (Store.RenameRepository).
+func (s *Service) renameRepository(ctx context.Context, logger slog.Logger, deliveryID string, rename RepositoryRename, asks *deliveryAsks) error {
+	seen, err := s.store.RenameSeen(ctx, rename.Body)
+	switch {
+	case err != nil:
+		return xerrors.Errorf("read whether the rename was judged: %w", err)
+	case seen:
+		return nil
+	}
+	logger = logger.With(slog.F("repo_id", rename.Repo.ID))
+	current, err := asks.repository(rename.Repo.ID)
+	if err == nil {
+		s.recordGitHubOwner(ctx, logger, Owner{ID: current.OwnerID, Login: current.OwnerLogin})
+		if err := s.store.ConfirmRepository(ctx, current, rename.Body, s.clock.Now()); err != nil {
+			return xerrors.Errorf("record the names that GitHub gives the repository: %w", err)
+		}
+		return nil
+	}
+	if xerrors.Is(err, errGitHubNotFound) {
+		logger.Info(ctx, "GitHub names no such public repository, so faucet judges the rename by the name that it holds")
+	} else {
+		logger.Warn(ctx, "GitHub gave no names for the repository, so faucet judges the rename by the name that it holds", slog.Error(err))
+	}
+	rename.Late = s.replayed(ctx, logger, deliveryID)
 	outcome, err := s.store.RenameRepository(ctx, rename, s.clock.Now())
 	if err != nil {
 		return xerrors.Errorf("rename the repository: %w", err)
 	}
 	if outcome == RenameQuarantined {
-		logger.Warn(ctx, "a rename or transfer of the repository never reached faucet, or an old one came again, so the repository resolves no name",
-			slog.F("repo_id", rename.Repo.ID), slog.F("from", rename.From), slog.F("full_name", rename.Repo.FullName))
+		logger.Warn(ctx, "a rename or transfer of the repository never reached faucet, or an old one came again, so the repository resolves no name until GitHub names it",
+			slog.F("from", rename.From), slog.F("full_name", rename.Repo.FullName))
 	}
 	return nil
 }
@@ -165,34 +196,54 @@ func renamesRepository(eventName, action string) bool {
 	return eventName == "repository" && (action == "renamed" || action == "transferred")
 }
 
-// recordOwner writes the login of owner when it is new or changed, which
-// few deliveries find, so most write nothing and never ask whether they are
-// a replay. A replay only adds an account that the store lacks.
-func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Owner, replay func() bool) {
+// recordOwner adds an account that the store lacks under a login that no
+// account holds, and writes nothing for an account under the login that the
+// store holds for it, as nearly every delivery names it. Any other login
+// would change what a name resolves to: GitHub renamed the account, or gave
+// its login to another account, or the body is an old one sent again. Then
+// faucet asks GitHub for the account, at most once a minute, and writes the
+// login that GitHub gives it. When GitHub does not answer, nothing changes,
+// and a later delivery asks again.
+func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Owner, asks *deliveryAsks) {
 	held, err := s.store.OwnerByID(ctx, owner.ID)
 	switch {
 	case err == nil && held.Login == owner.Login:
 		return
-	case err != nil && !xerrors.Is(err, ErrUnknownOwner):
-		logger.Warn(ctx, "could not read the owner", slog.Error(err))
-		return
-	case replay() && err == nil:
-		return
-	case replay():
-		err = s.store.AddOwner(ctx, owner)
-	default:
-		err = s.store.RecordOwner(ctx, owner)
+	case xerrors.Is(err, ErrUnknownOwner):
+		if _, err = s.store.OwnerByLogin(ctx, owner.Login); xerrors.Is(err, ErrUnknownOwner) {
+			if err := s.store.AddOwner(ctx, owner); err != nil {
+				logger.Warn(ctx, "could not record the owner", slog.Error(err))
+			}
+			return
+		}
 	}
 	if err != nil {
+		logger.Warn(ctx, "could not read the owner", slog.Error(err))
+		return
+	}
+	current, err := asks.account(owner.ID)
+	if err != nil {
+		logger.Info(ctx, "GitHub did not give the account a login, so faucet keeps the logins that it holds",
+			slog.F("owner_id", owner.ID), slog.Error(err))
+		return
+	}
+	s.recordGitHubOwner(ctx, logger, current)
+}
+
+// recordGitHubOwner writes the login that GitHub gives the account, unless
+// the store holds it.
+func (s *Service) recordGitHubOwner(ctx context.Context, logger slog.Logger, owner Owner) {
+	if held, err := s.store.OwnerByID(ctx, owner.ID); err == nil && held.Login == owner.Login {
+		return
+	}
+	if err := s.store.RecordOwner(ctx, owner); err != nil {
 		logger.Warn(ctx, "could not record the owner", slog.Error(err))
 	}
 }
 
 // replayed reports whether redelivery asked GitHub to send the delivery of
-// deliveryID again. When it cannot tell, it says yes, so that the delivery
-// moves no login, and a rename moves a name only from the name that the store
-// holds: a name that stays stale until the next delivery is safer than one
-// that a replay gives back.
+// deliveryID again. When it cannot tell, it says yes: a late rename moves a
+// name only from the name that the store holds, and quarantines nothing.
 func (s *Service) replayed(ctx context.Context, logger slog.Logger, deliveryID string) bool {
 	replay, err := s.redelivered(ctx, deliveryID)
 	if err != nil {

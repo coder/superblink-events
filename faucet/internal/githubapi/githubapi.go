@@ -30,16 +30,19 @@ var (
 	namePattern  = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
 )
 
-// Call sends the token to base and nowhere else. A redirect is followed
-// only when it keeps the scheme and host of base, so no redirect can carry the
-// token to another host. The caller closes the response body.
+// Call sends the token to base and nowhere else, and an empty token sends
+// none. A redirect is followed only when it keeps the scheme and host of
+// base, so no redirect can carry the token to another host. The caller closes
+// the response body.
 func Call(ctx context.Context, client *http.Client, base *url.URL, token, method, path, rawQuery string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, base.String()+path, nil)
 	if err != nil {
 		return nil, xerrors.Errorf("build GitHub request: %w", err)
 	}
 	req.URL.RawQuery = rawQuery
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "coder-faucet")

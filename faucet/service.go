@@ -48,20 +48,22 @@ type Deps struct {
 	RawEvents []string
 	// RecordRepositories makes every signed delivery that names a repository
 	// record it in the store (Store.RecordRepository), so a host that checks
-	// services by repo grants can find a granted repository's ID without
-	// GitHub. A failed write is logged, and the delivery goes on.
+	// services by repo grants can find a granted repository's ID. A failed
+	// write is logged, and the delivery goes on.
 	RecordRepositories bool
 	// Redelivered reports whether faucet's redelivery asked GitHub to send
-	// the delivery of this ID again. Such a replay names accounts as they
-	// were when it first came, so it moves no login. RecordRepositories needs
-	// it: pgstore.Store.Redelivered, or a func that answers false when the
-	// host runs no redelivery. There is no default, because one that answered
-	// no would let the host's own redeliveries move logins back, and one that
-	// answered yes would keep every login as first seen.
+	// the delivery of this ID again. Such a rename or transfer can come after
+	// a newer one, so it changes no name that GitHub did not confirm.
+	// RecordRepositories needs it: pgstore.Store.Redelivered, or a func that
+	// answers false when the host runs no redelivery.
 	Redelivered func(ctx context.Context, deliveryID string) (bool, error)
-	// GitHubAPIURL is GitHub's REST API, such as https://api.github.com.
+	// GitHubAPIURL is GitHub's REST API, such as https://api.github.com,
+	// which RecordRepositories needs. Before a delivery changes the login of
+	// an account or the names of a repository that the store holds, faucet
+	// asks it, with no token, for the names that GitHub gives them now.
 	GitHubAPIURL string
-	// GitHubClient sends the requests to GitHubAPIURL.
+	// GitHubClient sends those requests. Nil uses http.DefaultClient. The
+	// requests of one delivery end 4 seconds after the first one starts.
 	GitHubClient *http.Client
 	// MaxWaitsPerLogin caps how many wait_for_github_events calls one login
 	// holds open at once in this process, so a client that opens waits and
@@ -111,6 +113,7 @@ type Service struct {
 	webhook       *webhookState
 	recordRepos   bool
 	redelivered   func(ctx context.Context, deliveryID string) (bool, error)
+	names         *githubNames
 	waits         *loginLimiter
 	polls         *loginLimiter
 	listed        []eventDescriptor
@@ -138,6 +141,12 @@ func New(d Deps) (*Service, error) {
 	if err != nil {
 		return nil, xerrors.Errorf("raw events: %w", err)
 	}
+	var names *githubNames
+	if d.RecordRepositories {
+		if names, err = newGitHubNames(d.GitHubAPIURL, d.GitHubClient, d.Clock); err != nil {
+			return nil, xerrors.Errorf("recording repositories needs GitHubAPIURL: %w", err)
+		}
+	}
 	svc := &Service{
 		store:         d.Store,
 		raw:           d.RawStore,
@@ -150,6 +159,7 @@ func New(d Deps) (*Service, error) {
 		clock:         d.Clock,
 		recordRepos:   d.RecordRepositories,
 		redelivered:   d.Redelivered,
+		names:         names,
 		waits:         newLoginLimiter(d.MaxWaitsPerLogin, defaultMaxWaitsPerLogin),
 		polls:         newLoginLimiter(d.MaxPollsPerLogin, defaultMaxPollsPerLogin),
 	}

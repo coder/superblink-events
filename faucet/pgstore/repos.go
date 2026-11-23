@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRe
 		return 0, xerrors.Errorf("read repository: %w", err)
 	case rename.Late && (held.Quarantined || !held.HoldsFrom):
 		outcome = faucet.RenameLate
-	case !held.HoldsFrom:
+	case held.Quarantined || !held.HoldsFrom:
 		outcome = faucet.RenameQuarantined
 	}
 	switch outcome {
@@ -78,6 +79,42 @@ func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRe
 		return 0, xerrors.Errorf("commit: %w", err)
 	}
 	return outcome, nil
+}
+
+// RenameSeen implements faucet.Store.
+func (s *Store) RenameSeen(ctx context.Context, body [sha256.Size]byte) (_ bool, err error) {
+	defer func() { err = endedBy(ctx, err) }()
+	seen, err := s.q.RepositoryRenameSeen(ctx, body[:])
+	if err != nil {
+		return false, xerrors.Errorf("read the bodies of renames: %w", err)
+	}
+	return seen, nil
+}
+
+// ConfirmRepository implements faucet.Store.
+func (s *Store) ConfirmRepository(ctx context.Context, repo faucet.Repository, body [sha256.Size]byte, seenAt time.Time) (err error) {
+	defer func() { err = endedBy(ctx, err) }()
+	if err := repo.Validate(); err != nil {
+		return xerrors.Errorf("validate repository: %w", err)
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return xerrors.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.q.WithTx(tx)
+	if _, err := q.RecordRepositoryRename(ctx, database.RecordRepositoryRenameParams{BodySha256: body[:], RepoID: repo.ID, SeenAt: seenAt}); err != nil {
+		return xerrors.Errorf("record the body of the rename: %w", err)
+	}
+	if err := q.RenameRepository(ctx, database.RenameRepositoryParams{
+		RepoID: repo.ID, OwnerID: repo.OwnerID, OwnerLogin: repo.OwnerLogin, FullName: repo.FullName, SeenAt: seenAt,
+	}); err != nil {
+		return xerrors.Errorf("rename repository: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return xerrors.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 // RecordOwner implements faucet.Store. Another account that held the login

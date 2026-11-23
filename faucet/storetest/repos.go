@@ -18,6 +18,8 @@ var repositorySubtests = []subtest{
 	{"ARenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate", aRenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate},
 	{"AKeptOldRenameGivesNoNameBack", aKeptOldRenameGivesNoNameBack},
 	{"AQuarantineOutlastsEveryRename", aQuarantineOutlastsEveryRename},
+	{"ConfirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine", confirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine},
+	{"RenameSeenReportsTheBodiesThatTheStoreJudged", renameSeenReportsTheBodiesThatTheStoreJudged},
 	{"KeptRenamesThatChainGiveNoNameBack", keptRenamesThatChainGiveNoNameBack},
 	{"RenameRepositoryJudgesEachBodyOnce", renameRepositoryJudgesEachBodyOnce},
 	{"RenameRepositoryOfAnUnknownIDRecordsIt", renameRepositoryOfAnUnknownIDRecordsIt},
@@ -142,6 +144,42 @@ func aRenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate(t *testing.T, s fa
 	for _, name := range []string{"coder/r", "acme/s", "acme/t"} {
 		requireUnknownName(t, s, name)
 	}
+}
+
+// GitHub's answer for a repository's ID is its names now, so it replaces the
+// names of the row, quarantined or not, and records the body of the rename
+// that made faucet ask, which then changes nothing when it comes again.
+func confirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
+	moved := faucet.Repository{ID: 1, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/s"}
+	require.Equal(t, faucet.RenameQuarantined, renameDelivered(t, s, moved, "coder/s", repositoryTime.Add(time.Minute)))
+
+	asked := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
+	require.NoError(t, s.ConfirmRepository(ctx, moved, asked.Body, repositoryTime.Add(2*time.Minute)))
+	requireRepositoryNamed(t, s, "acme/s", moved)
+	requireUnknownName(t, s, "coder/r")
+	requireUnknownName(t, s, "coder/s")
+	require.Equal(t, faucet.RenameSeenBefore, renameAs(t, s, asked, repositoryTime.Add(3*time.Minute)))
+	requireRepositoryNamed(t, s, "acme/s", moved)
+
+	unseen := faucet.Repository{ID: 2, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/new"}
+	require.NoError(t, s.ConfirmRepository(ctx, unseen, renameOf(unseen, "acme/old", repositoryTime).Body, repositoryTime.Add(4*time.Minute)))
+	requireRepositoryNamed(t, s, "acme/new", unseen)
+
+	require.Error(t, s.ConfirmRepository(ctx, faucet.Repository{ID: 3, OwnerID: 8, OwnerLogin: "acme", FullName: "acme"}, asked.Body, repositoryTime))
+}
+
+func renameSeenReportsTheBodiesThatTheStoreJudged(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	rename := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
+	seen, err := s.RenameSeen(ctx, rename.Body)
+	require.NoError(t, err)
+	require.False(t, seen)
+	renameAs(t, s, rename, repositoryTime)
+	seen, err = s.RenameSeen(ctx, rename.Body)
+	require.NoError(t, err)
+	require.True(t, seen)
 }
 
 // Two kept bodies that chain, a rename to a name and a rename from it, give

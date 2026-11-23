@@ -463,6 +463,7 @@ func TestRedeliveryWantsEveryRenameAndTransferWhenTheHostRecordsRepositories(t *
 		deps := testDeps(&fakeStore{})
 		deps.RecordRepositories = records
 		deps.Redelivered = noRedeliveries
+		askingGitHub(newNamesStub(t))(&deps)
 		svc, err := faucet.New(deps)
 		require.NoError(t, err)
 		wants, err := svc.RedeliveryWants(context.Background())

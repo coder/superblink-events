@@ -3,6 +3,7 @@ package faucet
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -384,26 +385,38 @@ type Store interface {
 	// the login that the row's owner holds now, it gives the row the names of
 	// rename.Repo at seenAt (Renamed). GitHub writes From under the owner's
 	// login at the time, which the row lacks when the owner was renamed after
-	// it was seen, and lifts a quarantine unless Late. Any other name is
-	// stale or newer: a rename that is not Late quarantines the row
-	// (RenameQuarantined) and keeps its names, so that neither a missed
-	// rename nor an old body sent again binds a name to the repository, and
-	// a Late one changes nothing (RenameLate). Kept bodies can chain, so a
-	// quarantine keeps no name of the rename that caused it. A quarantined
-	// row resolves no name in RepositoryByName, and RecordRepository leaves
-	// it so. It calls rename.Repo.Validate.
+	// it was seen. Any other name is stale or newer: a rename that is not
+	// Late quarantines the row (RenameQuarantined) and keeps its names, so
+	// that neither a missed rename nor an old body sent again binds a name to
+	// the repository, and a Late one changes nothing (RenameLate). Kept
+	// bodies can chain, so a quarantine keeps no name of the rename that
+	// caused it, and no rename lifts it, from whatever name: a missed rename
+	// can come fresh after the transfer that quarantined the row, from the
+	// name that the row holds. A quarantined row gets the outcome that a row
+	// holding another name gets, resolves no name in RepositoryByName, and
+	// RecordRepository leaves it so. Only ConfirmRepository lifts it. It
+	// calls rename.Repo.Validate.
 	RenameRepository(ctx context.Context, rename RepositoryRename, seenAt time.Time) (RenameOutcome, error)
-	// RecordOwner records that a signed delivery named the account owner.ID
-	// with owner.Login. The account keeps the login of its latest
-	// delivery, because GitHub sends no event for each repository of an
-	// account that it renames. One login names one account, ignoring case:
-	// another account that held the login gives it up, and holds no login
-	// until a delivery names it again. It calls owner.Validate.
+	// RenameSeen reports whether RenameRepository or ConfirmRepository judged
+	// a rename whose Body is body.
+	RenameSeen(ctx context.Context, body [sha256.Size]byte) (bool, error)
+	// ConfirmRepository gives the row of repo.ID the names of repo, which
+	// GitHub gave for the ID, at seenAt, inserting a row when it holds none,
+	// and lifts its quarantine. It records body, the Body of the rename that
+	// made faucet ask, as judged in the same transaction, so that the rename
+	// changes nothing when it comes again. It calls repo.Validate.
+	ConfirmRepository(ctx context.Context, repo Repository, body [sha256.Size]byte, seenAt time.Time) error
+	// RecordOwner records that GitHub gives the account owner.ID the login
+	// owner.Login. The account keeps the login of its latest call, because
+	// GitHub sends no event for each repository of an account that it
+	// renames. One login names one account, ignoring case: another account
+	// that held the login gives it up, and holds no login until a call names
+	// it again. It calls owner.Validate.
 	RecordOwner(ctx context.Context, owner Owner) error
 	// AddOwner records owner as RecordOwner does when the store holds no row
 	// of the account and no account holds its login, and writes nothing
-	// otherwise. A delivery that GitHub sent again names an account as it was
-	// then, so it may add an account but must move no login. It calls
+	// otherwise. A delivery names an account as it was when GitHub signed
+	// it, so it may add an account but must move no login. It calls
 	// owner.Validate.
 	AddOwner(ctx context.Context, owner Owner) error
 	// OwnerByID returns the account of id with the login that the store
@@ -419,7 +432,7 @@ type Store interface {
 	// the name.
 	RepositoryByName(ctx context.Context, fullName string) (Repository, error)
 	// OwnerByLogin returns the account that holds login now, ignoring case,
-	// with the login as its latest delivery wrote it. It returns
+	// with the login as RecordOwner or AddOwner last wrote it. It returns
 	// ErrUnknownOwner when no account holds it.
 	OwnerByLogin(ctx context.Context, login string) (Owner, error)
 

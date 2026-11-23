@@ -249,3 +249,14 @@ func (q *Queries) RenameRepository(ctx context.Context, arg RenameRepositoryPara
 	)
 	return err
 }
+
+const repositoryRenameSeen = `-- name: RepositoryRenameSeen :one
+SELECT EXISTS (SELECT 1 FROM faucet_repo_renames WHERE body_sha256 = $1)::boolean AS seen
+`
+
+func (q *Queries) RepositoryRenameSeen(ctx context.Context, bodySha256 []byte) (bool, error) {
+	row := q.db.QueryRowContext(ctx, repositoryRenameSeen, bodySha256)
+	var seen bool
+	err := row.Scan(&seen)
+	return seen, err
+}

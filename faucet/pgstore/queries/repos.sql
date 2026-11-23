@@ -9,6 +9,9 @@ INSERT INTO faucet_repo_renames (body_sha256, repo_id, seen_at)
 VALUES (@body_sha256, @repo_id, @seen_at)
 ON CONFLICT (body_sha256) DO NOTHING;
 
+-- name: RepositoryRenameSeen :one
+SELECT EXISTS (SELECT 1 FROM faucet_repo_renames WHERE body_sha256 = @body_sha256)::boolean AS seen;
+
 -- name: LockRepositoryHolding :one
 -- holds_from says whether the row's full name is @from_full_name, as the row
 -- holds it or under the login that the row's owner holds now. GitHub writes

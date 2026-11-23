@@ -28,8 +28,8 @@ func (s *fakeStore) nowLocked() time.Time {
 type fakeRepo struct {
 	repo   faucet.Repository
 	seenAt time.Time
-	// quarantined is set by a rename from a name that repo did not hold. A
-	// quarantined row resolves no name.
+	// quarantined is set by a rename from a name that repo did not hold, and
+	// cleared only by ConfirmRepository. A quarantined row resolves no name.
 	quarantined bool
 }
 
@@ -66,7 +66,7 @@ func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.Repository
 		case rename.Late && (s.repos[i].quarantined || !held):
 			outcome = faucet.RenameLate
 			return
-		case held:
+		case held && !s.repos[i].quarantined:
 		default:
 			outcome = faucet.RenameQuarantined
 			s.repos[i].quarantined = true
@@ -75,6 +75,26 @@ func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.Repository
 		s.repos[i] = fakeRepo{repo: rename.Repo, seenAt: seenAt}
 	})
 	return outcome, err
+}
+
+func (s *fakeStore) RenameSeen(_ context.Context, body [32]byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.repoErr != nil {
+		return false, s.repoErr
+	}
+	return s.renameBodies[body], nil
+}
+
+func (s *fakeStore) ConfirmRepository(_ context.Context, repo faucet.Repository, body [32]byte, seenAt time.Time) error {
+	return s.writeRepository(repo, func() {
+		if s.renameBodies == nil {
+			s.renameBodies = map[[32]byte]bool{}
+		}
+		s.renameBodies[body] = true
+		s.repos = slices.DeleteFunc(s.repos, func(r fakeRepo) bool { return r.repo.ID == repo.ID })
+		s.repos = append(s.repos, fakeRepo{repo: repo, seenAt: seenAt})
+	})
 }
 
 func (s *fakeStore) AddOwner(_ context.Context, owner faucet.Owner) error {

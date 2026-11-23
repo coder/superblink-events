@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +51,31 @@ type loginConfig struct {
 	logins func(*pgstore.Store) loginStore
 	// rawEvents are the events that the server offers raw, push without it.
 	rawEvents []string
+	// accounts are the logins that GitHub gives accounts by ID now.
+	accounts map[int64]string
+}
+
+// newGitHubNames serves the GitHub API that faucet asks, with no token, for
+// the login of an account: accounts by ID, and 404 for any other account and
+// any repository, as GitHub answers for a private one.
+func newGitHubNames(t *testing.T, accounts map[int64]string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var id int64
+		login, ok := "", false
+		if _, err := fmt.Sscanf(r.URL.Path, "/user/%d", &id); err == nil && r.Header.Get("Authorization") == "" {
+			login, ok = accounts[id]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Not Found","status":"404"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "login": login, "type": "Organization"})
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
 }
 
 func newLoginServer(t *testing.T, configure ...func(*loginConfig)) *loginServer {
@@ -81,7 +107,9 @@ func newLoginServer(t *testing.T, configure ...func(*loginConfig)) *loginServer 
 	}
 	tokens, login, checks, err := newLogin(publicURL, nil, logins, nil, clock, logger)
 	require.NoError(t, err)
-	svc, _, err := newServices(config{secret: testSecret, publicURL: publicURL, webhook: cfg.webhook, rawEvents: cfg.rawEvents}, store, checks, clock, logger)
+	svc, _, err := newServices(config{
+		secret: testSecret, publicURL: publicURL, webhook: cfg.webhook, rawEvents: cfg.rawEvents, githubAPI: newGitHubNames(t, cfg.accounts),
+	}, store, checks, clock, logger)
 	require.NoError(t, err)
 	cron := cronRoutes{secret: []byte(loginCronSecret), svc: svc, retention: 24 * time.Hour, login: login, clock: clock, logger: logger}
 	srv.Config.Handler = newRouter(svc, tokens, login, cron, logger)

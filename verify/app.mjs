@@ -125,6 +125,8 @@ async function startGitHubStub({ hookToken, control, revoked, app }) {
   let target = null;
   let requests = [];
   let address;
+  // accounts are the logins that GET /user/<id> gives with no token, and the auth of each request for them.
+  const accounts = new Map();
 
   const add = (items) => {
     const now = Date.now();
@@ -158,6 +160,14 @@ async function startGitHubStub({ hookToken, control, revoked, app }) {
     if (req.method === 'POST' && url.pathname === '/__stub/deliveries') {
       add((await readJson(req)).deliveries);
       return reply(res, 200, {});
+    }
+    if (req.method === 'PUT' && url.pathname === '/__stub/accounts') {
+      const { id, login } = await readJson(req);
+      accounts.set(id, { login, asks: [] });
+      return reply(res, 200, {});
+    }
+    if (req.method === 'GET' && url.pathname === '/__stub/accounts') {
+      return reply(res, 200, [...accounts].map(([id, { login, asks }]) => ({ id, login, asks })));
     }
     if (req.method === 'GET' && url.pathname === '/__stub/requests') return reply(res, 200, requests);
     if (req.method === 'GET' && url.pathname === '/__stub/app') return reply(res, 200, { tokens: issued, exchanges });
@@ -286,6 +296,16 @@ async function startGitHubStub({ hookToken, control, revoked, app }) {
       if (url.pathname.startsWith('/orgs/')) return await hooks(req, res, url);
       if (req.method === 'GET' && url.pathname === '/login/oauth/authorize') return authorizeApp(res, url);
       if (req.method === 'POST' && url.pathname === '/login/oauth/access_token') return await exchangeAppToken(req, res);
+      const user = req.method === 'GET' && /^\/user\/(\d+)$/.exec(url.pathname);
+      if (user) {
+        const id = Number(user[1]);
+        const account = accounts.get(id);
+        account?.asks.push(kindOf(req.headers.authorization));
+        if (!account || req.headers.authorization) return reply(res, 404, { message: 'Not Found', status: '404' });
+        return reply(res, 200, { login: account.login, id, type: 'Organization' });
+      }
+      // GitHub answers 404 for a private repository to a request with no token.
+      if (/^\/repositories\/\d+$/.test(url.pathname)) return reply(res, 404, { message: 'Not Found', status: '404' });
       if (!isPerson(req.headers.authorization)) return reply(res, 401, { message: 'Bad credentials' });
       if (url.pathname === '/user') return reply(res, 200, PERSON);
       const repo = /^\/repos\/verify\/r(\d+)$/.exec(url.pathname);
