@@ -30,6 +30,8 @@ var namedDocs = []string{"README.md", "docs/*.md", "docs/diagrams/source.html"}
 var exemptPaths = []string{
 	"/user",                 // GitHub API: the token check in docs/security.md.
 	"/repos/{owner}/{name}", // GitHub API: the repository check in docs/security.md.
+	"/user/{id}",            // GitHub API: the login of an account, in docs/security.md.
+	"/repositories/{id}",    // GitHub API: the names of a repository, in docs/security.md.
 }
 
 // exemptVariables are environment variables that the docs name and that no

@@ -45,6 +45,7 @@ func TestDocsStateTheNumbersThatTheConstantsGive(t *testing.T) {
 		{"docs/security.md", "per process, and run %d `events/poll` calls at once", []any{defaultMaxPollsPerLogin}},
 		{"docs/events.md", "one read looks at no more than %d events of the target", []any{readWindow}},
 		{"docs/security.md", "and times out after %d seconds", []any{seconds(callbackRequestTimeout)}},
+		{"docs/security.md", "no answer within the %d seconds that the lookups of one delivery get", []any{seconds(githubAskBudget)}},
 		{"docs/security.md", "declares a body over %d KiB or that has headers over %d KiB", []any{kib(maxCallbackResponseBytes), kib(maxCallbackHeaderBytes)}},
 		{"docs/events.md", "the cursor and the %d deliveries that a subscription may hold", []any{MaxPendingDeliveries}},
 		{"docs/events.md", "starts a lease, which ends %d minutes after its last poll", []any{minutes(rawLeaseTTL)}},
