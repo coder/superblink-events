@@ -291,6 +291,16 @@ func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 	requireOwner(t, store, "coder", coderOrgID)
 	requireNoOwner(t, store, "coder-next")
 	requireBoundTo(t, store, "coder/tap", faucet.Repository{ID: 70, OwnerID: coderOrgID, OwnerLogin: "coder", FullName: "coder/tap"})
+
+	// Within the minute GitHub's answer is not asked for again, and an
+	// answer that old does not keep a login that a delivery contradicts.
+	requireAcknowledged(t, handler, "push", "d-5", pushNaming(70, coderOrgID, "coder-legacy/tap"))
+	requireNoOwner(t, store, "coder")
+	requireNoOwner(t, store, "coder-legacy")
+	require.Equal(t, 2, github.askedFor(userPath(coderOrgID)))
+	clock.Advance(time.Minute)
+	requireAcknowledged(t, handler, "push", "d-6", pushNaming(70, coderOrgID, "coder/tap"))
+	requireOwner(t, store, "coder", coderOrgID)
 }
 
 // One login names one account. A delivery that names an account under a
