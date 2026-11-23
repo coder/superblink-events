@@ -11,9 +11,10 @@ import (
 	"time"
 )
 
-const addOwner = `-- name: AddOwner :exec
+const addOwner = `-- name: AddOwner :execrows
 INSERT INTO faucet_owners (owner_id, login)
-VALUES ($1, $2)
+SELECT $1::bigint, $2::text
+WHERE NOT EXISTS (SELECT 1 FROM faucet_owners WHERE lower(login) = lower($2::text))
 ON CONFLICT DO NOTHING
 `
 
@@ -22,35 +23,49 @@ type AddOwnerParams struct {
 	Login   string
 }
 
-// An account that holds a row, or a login that another account holds, makes
-// it write nothing.
-func (q *Queries) AddOwner(ctx context.Context, arg AddOwnerParams) error {
-	_, err := q.db.ExecContext(ctx, addOwner, arg.OwnerID, arg.Login)
-	return err
+// An account that holds a row, or a login that a row holds or held before
+// its quarantine, makes it write nothing.
+func (q *Queries) AddOwner(ctx context.Context, arg AddOwnerParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addOwner, arg.OwnerID, arg.Login)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getOwnerByID = `-- name: GetOwnerByID :one
-SELECT owner_id, login
+SELECT owner_id, login, (quarantined_at IS NOT NULL)::boolean AS quarantined
 FROM faucet_owners
 WHERE owner_id = $1
 `
 
-func (q *Queries) GetOwnerByID(ctx context.Context, ownerID int64) (FaucetOwner, error) {
+type GetOwnerByIDRow struct {
+	OwnerID     int64
+	Login       string
+	Quarantined bool
+}
+
+func (q *Queries) GetOwnerByID(ctx context.Context, ownerID int64) (GetOwnerByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getOwnerByID, ownerID)
-	var i FaucetOwner
-	err := row.Scan(&i.OwnerID, &i.Login)
+	var i GetOwnerByIDRow
+	err := row.Scan(&i.OwnerID, &i.Login, &i.Quarantined)
 	return i, err
 }
 
 const getOwnerByLogin = `-- name: GetOwnerByLogin :one
 SELECT owner_id, login
 FROM faucet_owners
-WHERE lower(login) = lower($1::text)
+WHERE lower(login) = lower($1::text) AND quarantined_at IS NULL
 `
 
-func (q *Queries) GetOwnerByLogin(ctx context.Context, login string) (FaucetOwner, error) {
+type GetOwnerByLoginRow struct {
+	OwnerID int64
+	Login   string
+}
+
+func (q *Queries) GetOwnerByLogin(ctx context.Context, login string) (GetOwnerByLoginRow, error) {
 	row := q.db.QueryRowContext(ctx, getOwnerByLogin, login)
-	var i FaucetOwner
+	var i GetOwnerByLoginRow
 	err := row.Scan(&i.OwnerID, &i.Login)
 	return i, err
 }
@@ -60,7 +75,8 @@ SELECT r.repo_id, r.owner_id, o.login AS owner_login, (o.login || '/' || split_p
        (r.quarantined_at IS NOT NULL)::boolean AS quarantined
 FROM faucet_owners o
 JOIN faucet_repos r ON r.owner_id = o.owner_id
-WHERE lower(o.login) = lower($1::text) AND lower(split_part(r.full_name, '/', 2)) = lower($2::text)
+WHERE lower(o.login) = lower($1::text) AND o.quarantined_at IS NULL
+  AND lower(split_part(r.full_name, '/', 2)) = lower($2::text)
 ORDER BY r.seen_at DESC, r.repo_id DESC
 LIMIT 1
 `
@@ -93,6 +109,18 @@ func (q *Queries) GetRepositoryByName(ctx context.Context, arg GetRepositoryByNa
 		&i.Quarantined,
 	)
 	return i, err
+}
+
+const lockName = `-- name: LockName :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Holds a lock of the account or the repository that key names until the
+// transaction ends, so that GitHub's answers for one are written in the order
+// in which they were asked.
+func (q *Queries) LockName(ctx context.Context, key string) error {
+	_, err := q.db.ExecContext(ctx, lockName, key)
+	return err
 }
 
 const lockRepositoryHolding = `-- name: LockRepositoryHolding :one
@@ -128,6 +156,22 @@ func (q *Queries) LockRepositoryHolding(ctx context.Context, arg LockRepositoryH
 	return i, err
 }
 
+const quarantineOwner = `-- name: QuarantineOwner :exec
+UPDATE faucet_owners SET quarantined_at = COALESCE(quarantined_at, now())
+WHERE owner_id = $1 OR (lower(login) = lower($2::text) AND quarantined_at IS NULL)
+`
+
+type QuarantineOwnerParams struct {
+	OwnerID int64
+	Login   string
+}
+
+// The account and the account that holds the login, if any, hold no login.
+func (q *Queries) QuarantineOwner(ctx context.Context, arg QuarantineOwnerParams) error {
+	_, err := q.db.ExecContext(ctx, quarantineOwner, arg.OwnerID, arg.Login)
+	return err
+}
+
 const quarantineRepository = `-- name: QuarantineRepository :exec
 UPDATE faucet_repos
 SET quarantined_at = COALESCE(quarantined_at, $1)
@@ -147,7 +191,7 @@ func (q *Queries) QuarantineRepository(ctx context.Context, arg QuarantineReposi
 const recordOwner = `-- name: RecordOwner :exec
 INSERT INTO faucet_owners (owner_id, login)
 VALUES ($1, $2)
-ON CONFLICT (owner_id) DO UPDATE SET login = excluded.login
+ON CONFLICT (owner_id) DO UPDATE SET login = excluded.login, quarantined_at = NULL
 `
 
 type RecordOwnerParams struct {
@@ -207,7 +251,8 @@ func (q *Queries) RecordRepositoryRename(ctx context.Context, arg RecordReposito
 }
 
 const releaseOwnerLogin = `-- name: ReleaseOwnerLogin :exec
-DELETE FROM faucet_owners WHERE lower(login) = lower($1::text) AND owner_id <> $2
+UPDATE faucet_owners SET quarantined_at = now()
+WHERE lower(login) = lower($1::text) AND owner_id <> $2 AND quarantined_at IS NULL
 `
 
 type ReleaseOwnerLoginParams struct {
@@ -215,8 +260,9 @@ type ReleaseOwnerLoginParams struct {
 	OwnerID int64
 }
 
-// Another account that held the login gives it up, because one login names
-// one account.
+// Another account that holds the login gives it up, because one login names
+// one account. It keeps its row, quarantined, so that its next delivery asks
+// GitHub for its login.
 func (q *Queries) ReleaseOwnerLogin(ctx context.Context, arg ReleaseOwnerLoginParams) error {
 	_, err := q.db.ExecContext(ctx, releaseOwnerLogin, arg.Login, arg.OwnerID)
 	return err
@@ -248,15 +294,4 @@ func (q *Queries) RenameRepository(ctx context.Context, arg RenameRepositoryPara
 		arg.SeenAt,
 	)
 	return err
-}
-
-const repositoryRenameSeen = `-- name: RepositoryRenameSeen :one
-SELECT EXISTS (SELECT 1 FROM faucet_repo_renames WHERE body_sha256 = $1)::boolean AS seen
-`
-
-func (q *Queries) RepositoryRenameSeen(ctx context.Context, bodySha256 []byte) (bool, error) {
-	row := q.db.QueryRowContext(ctx, repositoryRenameSeen, bodySha256)
-	var seen bool
-	err := row.Scan(&seen)
-	return seen, err
 }

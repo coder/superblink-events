@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 
 	"github.com/coder/faucet/faucet"
 )
@@ -18,8 +20,10 @@ var repositorySubtests = []subtest{
 	{"ARenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate", aRenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate},
 	{"AKeptOldRenameGivesNoNameBack", aKeptOldRenameGivesNoNameBack},
 	{"AQuarantineOutlastsEveryRename", aQuarantineOutlastsEveryRename},
-	{"ConfirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine", confirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine},
-	{"RenameSeenReportsTheBodiesThatTheStoreJudged", renameSeenReportsTheBodiesThatTheStoreJudged},
+	{"ARenameTakesGitHubsNamesAndLiftsAQuarantine", aRenameTakesGitHubsNamesAndLiftsAQuarantine},
+	{"RenamesOfOneRepositoryAskGitHubInTurn", renamesOfOneRepositoryAskGitHubInTurn},
+	{"ConfirmOwnerTakesGitHubsLoginOrQuarantines", confirmOwnerTakesGitHubsLoginOrQuarantines},
+	{"LookupsOfOneAccountAskGitHubInTurn", lookupsOfOneAccountAskGitHubInTurn},
 	{"KeptRenamesThatChainGiveNoNameBack", keptRenamesThatChainGiveNoNameBack},
 	{"RenameRepositoryJudgesEachBodyOnce", renameRepositoryJudgesEachBodyOnce},
 	{"RenameRepositoryOfAnUnknownIDRecordsIt", renameRepositoryOfAnUnknownIDRecordsIt},
@@ -62,13 +66,31 @@ func renameOf(repo faucet.Repository, from string, at time.Time) faucet.Reposito
 	return faucet.RepositoryRename{Repo: repo, From: from, Body: body}
 }
 
+// renameAs applies rename while GitHub gives no names for the repository,
+// as it does for a private one.
 func renameAs(t *testing.T, s faucet.Store, rename faucet.RepositoryRename, at time.Time) faucet.RenameOutcome {
 	t.Helper()
 	require.NoError(t, s.RecordOwner(context.Background(), faucet.Owner{ID: rename.Repo.OwnerID, Login: rename.Repo.OwnerLogin}))
-	outcome, err := s.RenameRepository(context.Background(), rename, at)
+	outcome, err := s.RenameRepository(context.Background(), rename, at, noAnswer[faucet.Repository])
 	require.NoError(t, err)
 	return outcome
 }
+
+// renameAnswered applies rename while GitHub names the repository answer.
+func renameAnswered(t *testing.T, s faucet.Store, rename faucet.RepositoryRename, at time.Time, answer faucet.Repository) faucet.RenameOutcome {
+	t.Helper()
+	outcome, err := s.RenameRepository(context.Background(), rename, at, func() (faucet.Repository, error) { return answer, nil })
+	require.NoError(t, err)
+	return outcome
+}
+
+// noAnswer is GitHub giving no answer.
+func noAnswer[T any]() (T, error) {
+	var zero T
+	return zero, errNoAnswer
+}
+
+var errNoAnswer = xerrors.New("GitHub gave no answer")
 
 // late is rename as a delivery that faucet's redelivery asked for.
 func late(rename faucet.RepositoryRename) faucet.RepositoryRename {
@@ -147,39 +169,156 @@ func aRenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate(t *testing.T, s fa
 }
 
 // GitHub's answer for a repository's ID is its names now, so it replaces the
-// names of the row, quarantined or not, and records the body of the rename
-// that made faucet ask, which then changes nothing when it comes again.
-func confirmRepositoryGivesGitHubsNamesAndLiftsAQuarantine(t *testing.T, s faucet.Store) {
+// names of the row, quarantined or not, and gives the owner its login. The
+// body of the rename that asked then changes nothing when it comes again, and
+// GitHub is not asked again. An answer of another ID, or with names that are
+// not valid, is no answer.
+func aRenameTakesGitHubsNamesAndLiftsAQuarantine(t *testing.T, s faucet.Store) {
 	ctx := context.Background()
 	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
 	moved := faucet.Repository{ID: 1, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/s"}
 	require.Equal(t, faucet.RenameQuarantined, renameDelivered(t, s, moved, "coder/s", repositoryTime.Add(time.Minute)))
 
-	asked := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
-	require.NoError(t, s.ConfirmRepository(ctx, moved, asked.Body, repositoryTime.Add(2*time.Minute)))
-	requireRepositoryNamed(t, s, "acme/s", moved)
-	requireUnknownName(t, s, "coder/r")
-	requireUnknownName(t, s, "coder/s")
-	require.Equal(t, faucet.RenameSeenBefore, renameAs(t, s, asked, repositoryTime.Add(3*time.Minute)))
-	requireRepositoryNamed(t, s, "acme/s", moved)
+	missed := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
+	for _, wrong := range []faucet.Repository{{ID: 2, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/s"}, {ID: 1, OwnerID: 8, OwnerLogin: "acme", FullName: "acme"}} {
+		other := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime.Add(time.Duration(wrong.ID)*time.Second))
+		require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, other, repositoryTime.Add(2*time.Minute), wrong), "%+v", wrong)
+	}
+	requireUnknownName(t, s, "acme/s")
 
-	unseen := faucet.Repository{ID: 2, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/new"}
-	require.NoError(t, s.ConfirmRepository(ctx, unseen, renameOf(unseen, "acme/old", repositoryTime).Body, repositoryTime.Add(4*time.Minute)))
-	requireRepositoryNamed(t, s, "acme/new", unseen)
+	answer := faucet.Repository{ID: 1, OwnerID: 9, OwnerLogin: "octo", FullName: "octo/s"}
+	require.Equal(t, faucet.RenameConfirmed, renameAnswered(t, s, missed, repositoryTime.Add(3*time.Minute), answer))
+	requireRepositoryNamed(t, s, "octo/s", answer)
+	for _, name := range []string{"coder/r", "coder/s", "acme/s"} {
+		requireUnknownName(t, s, name)
+	}
+	outcome, err := s.RenameRepository(ctx, missed, repositoryTime.Add(4*time.Minute), func() (faucet.Repository, error) {
+		t.Error("GitHub is asked about a body that the store judged")
+		return answer, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, faucet.RenameSeenBefore, outcome)
 
-	require.Error(t, s.ConfirmRepository(ctx, faucet.Repository{ID: 3, OwnerID: 8, OwnerLogin: "acme", FullName: "acme"}, asked.Body, repositoryTime))
+	unseen := faucet.Repository{ID: 2, OwnerID: 9, OwnerLogin: "octo", FullName: "octo/new"}
+	require.Equal(t, faucet.RenameConfirmed, renameAnswered(t, s, renameOf(unseen, "octo/old", repositoryTime), repositoryTime.Add(5*time.Minute), unseen))
+	requireRepositoryNamed(t, s, "octo/new", unseen)
 }
 
-func renameSeenReportsTheBodiesThatTheStoreJudged(t *testing.T, s faucet.Store) {
+// GitHub can answer two renames of one repository that ask at once with
+// names of different times. The store asks for the second only after it wrote
+// the first answer, so the later question's answer is written last.
+func renamesOfOneRepositoryAskGitHubInTurn(t *testing.T, s faucet.Store) {
 	ctx := context.Background()
-	rename := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
-	seen, err := s.RenameSeen(ctx, rename.Body)
+	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
+	older := faucet.Repository{ID: 1, OwnerID: 7, OwnerLogin: "coder", FullName: "coder/s"}
+	newer := faucet.Repository{ID: 1, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/s"}
+	asking, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		_, err := s.RenameRepository(ctx, renameOf(older, "coder/r", repositoryTime), repositoryTime, func() (faucet.Repository, error) {
+			close(asking)
+			<-release
+			return older, nil
+		})
+		first <- err
+	}()
+	<-asking
+	var firstDone atomic.Bool
+	second := make(chan error, 1)
+	go func() {
+		_, err := s.RenameRepository(ctx, renameOf(newer, "coder/s", repositoryTime), repositoryTime, func() (faucet.Repository, error) {
+			if !firstDone.Load() {
+				t.Error("the store asked about the second rename before it wrote the first answer")
+			}
+			return newer, nil
+		})
+		second <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	firstDone.Store(true)
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	requireRepositoryNamed(t, s, "acme/s", newer)
+	requireUnknownName(t, s, "coder/s")
+}
+
+// A delivery's login for an account that GitHub does not confirm may be a
+// rename or an old body sent again, so neither the account nor the account
+// that holds that login keeps one. Their rows stay, so their logins are not
+// free for an account added without asking. GitHub's answer gives the
+// account its login back.
+func confirmOwnerTakesGitHubsLoginOrQuarantines(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	recordDelivered(t, s, faucet.Repository{ID: 1, OwnerID: 7, OwnerLogin: "acme", FullName: "acme/tap"}, repositoryTime)
+	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 9, Login: "octo"}))
+
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, noAnswer[faucet.Owner]))
+	for _, login := range []string{"acme", "octo"} {
+		_, err := s.OwnerByLogin(ctx, login)
+		require.ErrorIs(t, err, faucet.ErrUnknownOwner, login)
+	}
+	requireUnknownName(t, s, "acme/tap")
+	got, err := s.OwnerByID(ctx, 7)
+	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner)
+	require.Equal(t, faucet.Owner{ID: 7, Login: "acme"}, got)
+	_, err = s.OwnerByID(ctx, 9)
+	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner)
+
+	for _, taken := range []faucet.Owner{{ID: 11, Login: "ACME"}, {ID: 12, Login: "octo"}, {ID: 7, Login: "fresh"}} {
+		added, err := s.AddOwner(ctx, taken)
+		require.NoError(t, err)
+		require.False(t, added, "%+v", taken)
+	}
+	added, err := s.AddOwner(ctx, faucet.Owner{ID: 13, Login: "fresh"})
 	require.NoError(t, err)
-	require.False(t, seen)
-	renameAs(t, s, rename, repositoryTime)
-	seen, err = s.RenameSeen(ctx, rename.Body)
+	require.True(t, added)
+
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, func() (faucet.Owner, error) { return faucet.Owner{ID: 8, Login: "acme"}, nil }))
+	_, err = s.OwnerByID(ctx, 7)
+	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner, "an answer of another account is no answer")
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, func() (faucet.Owner, error) { return faucet.Owner{ID: 7, Login: "Acme"}, nil }))
+	got, err = s.OwnerByLogin(ctx, "acme")
 	require.NoError(t, err)
-	require.True(t, seen)
+	require.Equal(t, faucet.Owner{ID: 7, Login: "Acme"}, got)
+	requireRepositoryNamed(t, s, "acme/tap", faucet.Repository{ID: 1, OwnerID: 7, OwnerLogin: "Acme", FullName: "Acme/tap"})
+	_, err = s.OwnerByID(ctx, 9)
+	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner, "the account that held octo stays quarantined until GitHub names it")
+}
+
+// Two lookups of one account write GitHub's answers in the order in which
+// they asked.
+func lookupsOfOneAccountAskGitHubInTurn(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "acme"}))
+	asking, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		first <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, func() (faucet.Owner, error) {
+			close(asking)
+			<-release
+			return faucet.Owner{ID: 7, Login: "acme"}, nil
+		})
+	}()
+	<-asking
+	var firstDone atomic.Bool
+	second := make(chan error, 1)
+	go func() {
+		second <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, func() (faucet.Owner, error) {
+			if !firstDone.Load() {
+				t.Error("the store asked about the account again before it wrote the first answer")
+			}
+			return faucet.Owner{ID: 7, Login: "acme-new"}, nil
+		})
+	}()
+	time.Sleep(100 * time.Millisecond)
+	firstDone.Store(true)
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	got, err := s.OwnerByLogin(ctx, "acme-new")
+	require.NoError(t, err)
+	require.Equal(t, faucet.Owner{ID: 7, Login: "acme-new"}, got)
 }
 
 // Two kept bodies that chain, a rename to a name and a rename from it, give
@@ -292,7 +431,7 @@ func recordAndRenameRepositoryValidateInput(t *testing.T, s faucet.Store) {
 		{ID: 1, OwnerID: 7, OwnerLogin: "coder", FullName: "coder/fau\x00cet"},
 	} {
 		require.Error(t, s.RecordRepository(ctx, bad, repositoryTime), "%+v", bad)
-		_, err := s.RenameRepository(ctx, faucet.RepositoryRename{Repo: bad, From: "coder/faucet", Body: refused.Body}, repositoryTime)
+		_, err := s.RenameRepository(ctx, faucet.RepositoryRename{Repo: bad, From: "coder/faucet", Body: refused.Body}, repositoryTime, noAnswer[faucet.Repository])
 		require.Error(t, err, "%+v", bad)
 	}
 	requireUnknownName(t, s, "coder/faucet")
@@ -323,7 +462,7 @@ func ownerByLoginIgnoresCaseAndTakesTheOwnerSeenLatest(t *testing.T, s faucet.St
 	_, err = s.OwnerByLogin(ctx, "coder")
 	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "the account that gave the login up does not get it back")
 	_, err = s.OwnerByID(ctx, 7)
-	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "the account that gave its login up holds none")
+	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner, "the account that gave its login up holds none")
 	requireUnknownName(t, s, "coder/tap")
 
 	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "coder"}))
@@ -380,24 +519,30 @@ func anOwnerKeepsOnlyTheLoginOfItsLatestDelivery(t *testing.T, s faucet.Store) {
 	require.ErrorIs(t, err, faucet.ErrUnknownOwner)
 }
 
-// A delivery that GitHub sent again names an account as it was then: it may
-// add an account that the store lacks, but it moves no login.
+// A delivery names an account as it was when GitHub signed it: it may add an
+// account that the store lacks, but it moves no login.
 func addOwnerAddsAnAccountAndMovesNoLogin(t *testing.T, s faucet.Store) {
 	ctx := context.Background()
 	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "acme"}))
-	require.NoError(t, s.AddOwner(ctx, faucet.Owner{ID: 7, Login: "acme-old"}))
-	require.NoError(t, s.AddOwner(ctx, faucet.Owner{ID: 9, Login: "ACME"}))
+	for _, owner := range []faucet.Owner{{ID: 7, Login: "acme-old"}, {ID: 9, Login: "ACME"}} {
+		added, err := s.AddOwner(ctx, owner)
+		require.NoError(t, err)
+		require.False(t, added, "%+v", owner)
+	}
 	got, err := s.OwnerByLogin(ctx, "acme")
 	require.NoError(t, err)
 	require.Equal(t, faucet.Owner{ID: 7, Login: "acme"}, got, "an account with a row keeps its login, and a login that one holds stays with it")
 	_, err = s.OwnerByLogin(ctx, "acme-old")
 	require.ErrorIs(t, err, faucet.ErrUnknownOwner)
 
-	require.NoError(t, s.AddOwner(ctx, faucet.Owner{ID: 9, Login: "octo"}))
+	added, err := s.AddOwner(ctx, faucet.Owner{ID: 9, Login: "octo"})
+	require.NoError(t, err)
+	require.True(t, added)
 	got, err = s.OwnerByLogin(ctx, "octo")
 	require.NoError(t, err)
 	require.Equal(t, faucet.Owner{ID: 9, Login: "octo"}, got, "an account that the store lacks is added")
-	require.Error(t, s.AddOwner(ctx, faucet.Owner{ID: 5, Login: "ac/me"}))
+	_, err = s.AddOwner(ctx, faucet.Owner{ID: 5, Login: "ac/me"})
+	require.Error(t, err)
 }
 
 // GitHub sends no repository event when it renames an account, so the row of
