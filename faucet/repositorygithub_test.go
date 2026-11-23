@@ -383,7 +383,7 @@ func TestAMissedRenameSentAgainLiftsNoQuarantine(t *testing.T) {
 // kept the bodies it judged, can come again after the repository came back to
 // the name that the transfer moved it from. GitHub then names the repository
 // by that name, which an answer that lags the transfer gives too, so faucet
-// binds neither name and leaves the body unjudged: the transfer gives the
+// binds neither name and keeps the body judged: the transfer gives the
 // repository no name back.
 func TestAKeptTransferGivesAPublicRepositoryNoNameBack(t *testing.T) {
 	t.Parallel()
