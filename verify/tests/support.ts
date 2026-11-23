@@ -1256,6 +1256,17 @@ export class HookStub {
     return (await this.#call('GET', '/__stub/requests')) as StubRequest[];
   }
 
+  // account makes GET /user/<id> give login to a request with no token, as GitHub does for an account it renamed.
+  async account(id: number, login: string): Promise<void> {
+    await this.#call('PUT', '/__stub/accounts', { id, login });
+  }
+
+  // accountAsks is the auth of each request for the account, 'none' for one with no token.
+  async accountAsks(id: number): Promise<string[]> {
+    const accounts = (await this.#call('GET', '/__stub/accounts')) as { id: number; asks: string[] }[];
+    return accounts.find((a) => a.id === id)?.asks ?? [];
+  }
+
   async attempts(): Promise<StubAttempt[]> {
     return (await this.#call('GET', '/__stub/attempts')) as StubAttempt[];
   }

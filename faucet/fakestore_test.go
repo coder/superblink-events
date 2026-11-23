@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -28,13 +29,14 @@ func (s *fakeStore) nowLocked() time.Time {
 type fakeRepo struct {
 	repo   faucet.Repository
 	seenAt time.Time
-	// quarantined is set by a rename from a name that repo did not hold. A
-	// quarantined row resolves no name.
+	// quarantined is set by a rename from a name that repo did not hold, and
+	// cleared only by an answer of GitHub. A quarantined row resolves no name.
 	quarantined bool
 }
 
 type fakeRepoOwner struct {
-	login string
+	login       string
+	quarantined bool
 }
 
 func (s *fakeStore) RecordRepository(_ context.Context, repo faucet.Repository, seenAt time.Time) error {
@@ -45,56 +47,104 @@ func (s *fakeStore) RecordRepository(_ context.Context, repo faucet.Repository, 
 	})
 }
 
-func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.RepositoryRename, seenAt time.Time) (faucet.RenameOutcome, error) {
-	var outcome faucet.RenameOutcome
-	err := s.writeRepository(rename.Repo, func() {
-		if s.renameBodies[rename.Body] {
-			outcome = faucet.RenameSeenBefore
-			return
-		}
+// lockName takes the lock of key, waiting at most wait, as the advisory lock
+// of pgstore does, and returns the func that releases it.
+func (s *fakeStore) lockName(key string, wait time.Duration) (func(), bool) {
+	s.mu.Lock()
+	if s.nameLocks == nil {
+		s.nameLocks = map[string]chan struct{}{}
+	}
+	l, ok := s.nameLocks[key]
+	if !ok {
+		l = make(chan struct{}, 1)
+		s.nameLocks[key] = l
+	}
+	s.mu.Unlock()
+	timeout := time.NewTimer(max(wait, time.Millisecond))
+	defer timeout.Stop()
+	select {
+	case l <- struct{}{}:
+		return func() { <-l }, true
+	case <-timeout.C:
+		return nil, false
+	}
+}
+
+func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.RepositoryRename, seenAt time.Time, lookup faucet.Lookup[faucet.Repository]) (faucet.RenameOutcome, error) {
+	seen := false
+	if err := s.writeRepository(rename.Repo, func() {
+		seen = s.renameBodies[rename.Body]
 		if s.renameBodies == nil {
 			s.renameBodies = map[[32]byte]bool{}
 		}
 		s.renameBodies[rename.Body] = true
-		outcome = faucet.Renamed
-		i := slices.IndexFunc(s.repos, func(r fakeRepo) bool { return r.repo.ID == rename.Repo.ID })
-		held := i >= 0 && s.holdsLocked(s.repos[i].repo, rename.From)
-		switch {
-		case i < 0:
-			s.repos = append(s.repos, fakeRepo{repo: rename.Repo, seenAt: seenAt})
-			return
-		case rename.Late && (s.repos[i].quarantined || !held):
-			outcome = faucet.RenameLate
-			return
-		case held:
-		default:
-			outcome = faucet.RenameQuarantined
-			s.repos[i].quarantined = true
-			return
+	}); err != nil || seen {
+		return faucet.RenameSeenBefore, err
+	}
+	unlock, ok := s.lockName(fmt.Sprintf("repo:%d", rename.Repo.ID), lookup.Wait)
+	if !ok {
+		s.mu.Lock()
+		delete(s.renameBodies, rename.Body)
+		s.mu.Unlock()
+		return 0, faucet.ErrNameBusy
+	}
+	defer unlock()
+	current, err := lookup.Ask()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := slices.IndexFunc(s.repos, func(r fakeRepo) bool { return r.repo.ID == rename.Repo.ID })
+	answered := err == nil && current.ID == rename.Repo.ID && current.Validate() == nil
+	switch {
+	case answered && strings.EqualFold(current.FullName, rename.From) && !strings.EqualFold(current.FullName, rename.Repo.FullName):
+		if i < 0 {
+			s.repos = append(s.repos, fakeRepo{repo: current, seenAt: seenAt})
+			i = len(s.repos) - 1
 		}
+		s.repos[i].quarantined = true
+		return faucet.RenameQuarantined, nil
+	case answered:
+		s.recordOwnerLocked(faucet.Owner{ID: current.OwnerID, Login: current.OwnerLogin})
+		if i >= 0 {
+			s.repos = slices.Delete(s.repos, i, i+1)
+		}
+		s.repos = append(s.repos, fakeRepo{repo: current, seenAt: seenAt})
+		return faucet.RenameConfirmed, nil
+	}
+	held := i >= 0 && s.holdsLocked(s.repos[i].repo, rename.From)
+	switch {
+	case i < 0:
+		s.repos = append(s.repos, fakeRepo{repo: rename.Repo, seenAt: seenAt})
+		return faucet.Renamed, nil
+	case rename.Late && (s.repos[i].quarantined || !held):
+		return faucet.RenameLate, nil
+	case held && !s.repos[i].quarantined:
 		s.repos[i] = fakeRepo{repo: rename.Repo, seenAt: seenAt}
-	})
-	return outcome, err
+		return faucet.Renamed, nil
+	}
+	s.repos[i].quarantined = true
+	return faucet.RenameQuarantined, nil
 }
 
-func (s *fakeStore) AddOwner(_ context.Context, owner faucet.Owner) error {
+func (s *fakeStore) AddOwner(_ context.Context, owner faucet.Owner) (bool, error) {
 	if err := owner.Validate(); err != nil {
-		return err
+		return false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.repoWrites++
 	if s.repoErr != nil {
-		return s.repoErr
+		return false, s.repoErr
 	}
 	if _, held := s.owners[owner.ID]; held {
-		return nil
+		return false, nil
 	}
-	if _, _, taken := s.ownerLocked(owner.Login); taken {
-		return nil
+	for _, o := range s.owners {
+		if strings.EqualFold(o.login, owner.Login) {
+			return false, nil
+		}
 	}
 	s.recordOwnerLocked(owner)
-	return nil
+	return true, nil
 }
 
 func (s *fakeStore) RecordOwner(_ context.Context, owner faucet.Owner) error {
@@ -111,6 +161,41 @@ func (s *fakeStore) RecordOwner(_ context.Context, owner faucet.Owner) error {
 	return nil
 }
 
+func (s *fakeStore) ConfirmOwner(_ context.Context, owner faucet.Owner, lookup faucet.Lookup[faucet.Owner]) error {
+	if err := owner.Validate(); err != nil {
+		return err
+	}
+	unlock, ok := s.lockName(fmt.Sprintf("owner:%d", owner.ID), lookup.Wait)
+	if !ok {
+		return faucet.ErrNameBusy
+	}
+	defer unlock()
+	s.mu.Lock()
+	held, found := s.owners[owner.ID]
+	s.mu.Unlock()
+	if found && !held.quarantined && held.login == owner.Login {
+		return nil
+	}
+	current, err := lookup.Ask()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repoWrites++
+	if s.repoErr != nil {
+		return s.repoErr
+	}
+	if err == nil && current.ID == owner.ID && current.Validate() == nil {
+		s.recordOwnerLocked(current)
+		return nil
+	}
+	for id, o := range s.owners {
+		if id == owner.ID || !o.quarantined && strings.EqualFold(o.login, owner.Login) {
+			o.quarantined = true
+			s.owners[id] = o
+		}
+	}
+	return nil
+}
+
 func (s *fakeStore) ownerWriteCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -118,15 +203,18 @@ func (s *fakeStore) ownerWriteCount() int {
 }
 
 // recordOwnerLocked gives owner its login, which every other account gives
-// up.
+// up, quarantined.
 func (s *fakeStore) recordOwnerLocked(owner faucet.Owner) {
 	s.ownerWrites++
 	if s.owners == nil {
 		s.owners = map[int64]fakeRepoOwner{}
 	}
-	maps.DeleteFunc(s.owners, func(id int64, o fakeRepoOwner) bool {
-		return id != owner.ID && strings.EqualFold(o.login, owner.Login)
-	})
+	for id, o := range s.owners {
+		if id != owner.ID && strings.EqualFold(o.login, owner.Login) {
+			o.quarantined = true
+			s.owners[id] = o
+		}
+	}
 	s.owners[owner.ID] = fakeRepoOwner{login: owner.Login}
 }
 
@@ -192,8 +280,11 @@ func (s *fakeStore) OwnerByID(_ context.Context, id int64) (faucet.Owner, error)
 		return faucet.Owner{}, s.repoErr
 	}
 	o, ok := s.owners[id]
-	if !ok {
+	switch {
+	case !ok:
 		return faucet.Owner{}, faucet.ErrUnknownOwner
+	case o.quarantined:
+		return faucet.Owner{ID: id, Login: o.login}, faucet.ErrQuarantinedOwner
 	}
 	return faucet.Owner{ID: id, Login: o.login}, nil
 }
@@ -218,7 +309,7 @@ func (s *fakeStore) currentNameLocked(repo faucet.Repository) string {
 // ownerLocked returns the account that holds login, which is at most one.
 func (s *fakeStore) ownerLocked(login string) (int64, fakeRepoOwner, bool) {
 	for id, o := range s.owners {
-		if strings.EqualFold(o.login, login) {
+		if !o.quarantined && strings.EqualFold(o.login, login) {
 			return id, o, true
 		}
 	}

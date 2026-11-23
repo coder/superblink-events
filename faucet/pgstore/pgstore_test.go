@@ -18,6 +18,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 
 	"cdr.dev/slog/v3"
 	"github.com/coder/faucet/faucet"
@@ -220,7 +221,7 @@ func TestMigrateLeavesHostMigrationsTableAlone(t *testing.T) {
 	require.EqualValues(t, 400, hostVersion)
 	var faucetVersion int64
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT version FROM `+pq.QuoteIdentifier(pgstore.MigrationsTable)).Scan(&faucetVersion))
-	require.EqualValues(t, 19, faucetVersion)
+	require.EqualValues(t, 20, faucetVersion)
 }
 
 // The raw events migration adds tables of its own and one index. A down
@@ -435,9 +436,44 @@ func TestTheOrgGrantsMigrationBindsEachLoginToTheAccountThatHoldsItAndBack(t *te
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "coder-legacy"}))
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 99, Login: "coder"}))
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 10, Login: "octo"}))
+	// A rollback to before 000016 goes down 000020 first, which drops the
+	// rows of accounts that hold no login.
+	runMigrationFile(t, db, "000020_owner_quarantine.down.sql")
 	runMigrationFile(t, db, "000016_org_grant_accounts.down.sql")
 	require.Equal(t, []string{"repo:coder/faucet", "org:coder-legacy", "all", "org:octo#9", "org:gone"}, grantsOf("orgs"),
 		"a renamed account's grant takes its new login, not the old one that account 99 holds now, and account 9 lost its login to 10")
+}
+
+// The owner quarantine migration's down drops the accounts that hold no
+// login, which the build before cannot tell from accounts that do, and its
+// up keeps every account that the down kept.
+func TestTheOwnerQuarantineMigrationDropsQuarantinedAccountsDownAndKeepsTheRestUp(t *testing.T) {
+	t.Parallel()
+	db := newDatabase(t, testDatabaseURL(t))
+	store := pgstore.New(db)
+	ctx := context.Background()
+	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "acme"}))
+	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 9, Login: "octo"}))
+	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 11, Login: "acme"}))
+	require.NoError(t, store.ConfirmOwner(ctx, faucet.Owner{ID: 13, Login: "octo"}, faucet.Lookup[faucet.Owner]{Wait: time.Second, Ask: func() (faucet.Owner, error) {
+		return faucet.Owner{}, xerrors.New("GitHub gave no answer")
+	}}))
+	count := func() (n int) {
+		t.Helper()
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM faucet_owners`).Scan(&n))
+		return n
+	}
+	require.Equal(t, 3, count(), "accounts 7 and 9 are quarantined, and 13 has no row")
+
+	runMigrationFile(t, db, "000020_owner_quarantine.down.sql")
+	require.Equal(t, 1, count())
+	_, err := db.ExecContext(ctx, `INSERT INTO faucet_owners (owner_id, login) VALUES (12, 'ACME')`)
+	require.Error(t, err, "one login names one account again")
+
+	runMigrationFile(t, db, "000020_owner_quarantine.up.sql")
+	got, err := store.OwnerByLogin(ctx, "acme")
+	require.NoError(t, err)
+	require.Equal(t, faucet.Owner{ID: 11, Login: "acme"}, got)
 }
 
 // The workload trusts migration lets a client have no secret. Its down drops
@@ -940,7 +976,9 @@ func TestRepositoryCallThatItsContextCutShortWrapsTheContextError(t *testing.T) 
 	for name, call := range map[string]func(context.Context) error{
 		"RecordRepository": func(ctx context.Context) error { return store.RecordRepository(ctx, repo, time.Now()) },
 		"RenameRepository": func(ctx context.Context) error {
-			_, err := store.RenameRepository(ctx, faucet.RepositoryRename{Repo: repo, From: "coder/tap"}, time.Now())
+			_, err := store.RenameRepository(ctx, faucet.RepositoryRename{Repo: repo, From: "coder/tap"}, time.Now(), faucet.Lookup[faucet.Repository]{
+				Wait: time.Second, Ask: func() (faucet.Repository, error) { return faucet.Repository{}, faucet.ErrUnknownRepository },
+			})
 			return err
 		},
 		"RepositoryByName": func(ctx context.Context) error {

@@ -433,6 +433,8 @@ func newServices(cfg config, store *pgstore.Store, checks access, clock quartz.C
 		// login server finds by the deliveries that named them.
 		RecordRepositories: true,
 		Redelivered:        store.Redelivered,
+		GitHubAPIURL:       cfg.githubAPI,
+		GitHubClient:       &http.Client{Timeout: githubTimeout},
 	})
 	if err != nil {
 		return nil, nil, xerrors.Errorf("create service: %w", err)

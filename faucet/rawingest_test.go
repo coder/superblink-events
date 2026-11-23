@@ -353,7 +353,11 @@ func TestRawIngestTypedStaysTyped(t *testing.T) {
 func TestRawIngestRecordsTheRepository(t *testing.T) {
 	t.Parallel()
 
-	recording := func(d *faucet.Deps) { d.RecordRepositories, d.Redelivered = true, noRedeliveries }
+	github := newNamesStub(t)
+	recording := func(d *faucet.Deps) {
+		d.RecordRepositories, d.Redelivered = true, noRedeliveries
+		askingGitHub(github)(d)
+	}
 	named := func(fullName string) map[string]any {
 		return map[string]any{"repository": map[string]any{"id": repoID, "full_name": fullName, "owner": map[string]any{"id": 9, "login": "octo"}}}
 	}

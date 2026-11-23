@@ -89,7 +89,7 @@ func newRawServer(t *testing.T) *rawServer {
 	require.NoError(t, pgstore.Migrate(context.Background(), db))
 
 	hooks := newRawHooks()
-	cfg := config{secret: testSecret, cronSecret: testCronSecret, retention: 30 * 24 * time.Hour, hookAdmin: hooks, rawEvents: []string{"push"}}
+	cfg := config{secret: testSecret, cronSecret: testCronSecret, retention: 30 * 24 * time.Hour, hookAdmin: hooks, rawEvents: []string{"push"}, githubAPI: newGitHubNames(t, nil)}
 	clock := quartz.NewReal()
 	logger := slog.Make(sloghuman.Sink(&syncBuffer{}))
 	svc, redeliverer, err := newServices(cfg, pgstore.New(db), access{authorizer: grantChecks{}}, clock, logger)

@@ -91,8 +91,9 @@ type FaucetEventLine struct {
 }
 
 type FaucetOwner struct {
-	OwnerID int64
-	Login   string
+	OwnerID       int64
+	Login         string
+	QuarantinedAt sql.NullTime
 }
 
 type FaucetPurgeMark struct {

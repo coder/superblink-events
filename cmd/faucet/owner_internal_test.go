@@ -308,7 +308,7 @@ func TestAnOrgGrantFollowsItsAccountAndNoOtherHolderOfItsLogin(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
-	srv := newLoginServer(t)
+	srv := newLoginServer(t, func(c *loginConfig) { c.accounts = map[int64]string{coderID: "coder-legacy", 99: "coder"} })
 	srv.deliverRunOf(t, "existing-1", coderExisting)
 	coderSecret := srv.client(t, "coder-watcher", "/github/mcp", bothScopes, "org:coder")
 
@@ -334,14 +334,16 @@ func TestAnOrgGrantFollowsItsAccountAndNoOtherHolderOfItsLogin(t *testing.T) {
 	repos, _ = waitFor(ctx, t, taker, map[string]any{"owner": "coder", "cursor": "v2.0"})
 	require.Equal(t, []int64{takeover.id}, repos, "a grant made now names the account that holds the login now")
 
+	// The hook admin sends the first delivery again by hand within the
+	// minute after faucet asked GitHub, so faucet asks no more and trusts
+	// neither account with the login until a later delivery gets an answer.
 	srv.deliverRunOf(t, "existing-1", coderExisting)
-	held, err := srv.store.OwnerByLogin(ctx, "coder")
-	require.NoError(t, err)
-	require.Equal(t, faucet.Owner{ID: coderID, Login: "coder"}, held, "the delivery sent again by hand gives the renamed account its old login back")
+	_, err = srv.store.OwnerByLogin(ctx, "coder")
+	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "the delivery sent again by hand gives the renamed account no old login back")
 	require.Contains(t, waitError(ctx, t, taker, map[string]any{"owner": "coder"}), "the grant org:coder names an account that holds another login now")
 	require.Contains(t, waitError(ctx, t, taker, map[string]any{"repo": "coder/existing"}), "no grant of this service names coder/existing")
-	repos, _ = waitFor(ctx, t, watcher, map[string]any{"owner": "coder", "cursor": "v2.0"})
-	require.Equal(t, []int64{coderExisting.id, coderExisting.id}, repos, "the first grant reads its own account under either login")
+	require.Contains(t, waitError(ctx, t, watcher, map[string]any{"owner": "coder-legacy"}), "no grant of this service names the owner coder-legacy")
+	require.Contains(t, waitError(ctx, t, watcher, map[string]any{"repo": "coder-legacy/existing"}), "no grant of this service names coder-legacy/existing")
 }
 
 // An organization that gave up a login and the one that took it never mix:
@@ -357,6 +359,7 @@ func TestAnOrgGrantNeverSnapsBackToTheAccountThatGaveItsLoginUp(t *testing.T) {
 	require.NoError(t, err)
 	srv := newLoginServer(t, func(c *loginConfig) {
 		c.webhook = &faucet.WebhookDeps{Key: key, Callbacks: allow, AllowInsecureLoopback: true}
+		c.accounts = map[int64]string{7: "coder", 99: "old-coder"}
 	})
 	tool := deliveredRepo{id: 44, fullName: "old-coder/tool"}
 	faucetRepo := deliveredRepo{id: 42, fullName: "coder/faucet"}
@@ -404,7 +407,7 @@ func TestAnOrgGrantNeverSnapsBackToTheAccountThatGaveItsLoginUp(t *testing.T) {
 // new login, moves the repository.
 func TestARepositoryOfARenamedOrganizationIsGrantedAndRenamedUnderItsNewLogin(t *testing.T) {
 	t.Parallel()
-	srv := newLoginServer(t)
+	srv := newLoginServer(t, func(c *loginConfig) { c.accounts = map[int64]string{7: "coder"} })
 	repoSecret := srv.client(t, "repo-grant", "/github/mcp", bothScopes, "repo:coder/faucet", "repo:coder/tap")
 	srv.deliverRunOwnedBy(t, "old-1", deliveredRepo{id: 5, fullName: "old-coder/faucet"}, 7, "old-coder")
 	srv.deliverRunOwnedBy(t, "new-1", deliveredRepo{id: 5, fullName: "coder/faucet"}, 7, "coder")
