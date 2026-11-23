@@ -59,6 +59,10 @@ type Deps struct {
 	// no would let the host's own redeliveries move logins back, and one that
 	// answered yes would keep every login as first seen.
 	Redelivered func(ctx context.Context, deliveryID string) (bool, error)
+	// GitHubAPIURL is GitHub's REST API, such as https://api.github.com.
+	GitHubAPIURL string
+	// GitHubClient sends the requests to GitHubAPIURL.
+	GitHubClient *http.Client
 	// MaxWaitsPerLogin caps how many wait_for_github_events calls one login
 	// holds open at once in this process, so a client that opens waits and
 	// drops its connection cannot pile them up. Zero means 10. A negative value

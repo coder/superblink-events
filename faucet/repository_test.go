@@ -29,6 +29,7 @@ func newRepositoryHarness(t *testing.T, mutate ...func(*faucet.Deps)) (*fakeStor
 	deps.Clock = clock
 	deps.RecordRepositories = true
 	deps.Redelivered = noRedeliveries
+	askingGitHub(newNamesStub(t))(&deps)
 	for _, m := range mutate {
 		m(&deps)
 	}
@@ -204,20 +205,17 @@ func TestWebhookRenamesARepositoryOnlyFromTheNameItHolds(t *testing.T) {
 }
 
 // A delivery that faucet's redelivery asked GitHub to send again names an
-// account as it was when the delivery first came. It adds an account that
-// faucet has not seen and moves no login, so a replay from before a rename
-// never gives the old login back. When faucet cannot tell whether a delivery
-// is such a replay, it moves no login either.
+// account as it was when the delivery first came. Like any delivery, it moves
+// a login only to the one that GitHub gives the account now, so a replay from
+// before a rename never gives the old login back. It adds an account that
+// faucet has not seen.
 func TestARedeliveredDeliveryMovesNoLogin(t *testing.T) {
 	t.Parallel()
 	redelivered := map[string]bool{"before-rename": true, "first-of-octo": true}
-	store, _, handler := newRepositoryHarness(t, func(d *faucet.Deps) {
-		d.Redelivered = func(_ context.Context, id string) (bool, error) {
-			if id == "unknown" {
-				return false, xerrors.New("read redeliveries: connection reset")
-			}
-			return redelivered[id], nil
-		}
+	github := newNamesStub(t)
+	github.answer(userPath(7), githubUser(t, 7, "acme-legacy"))
+	store, clock, handler := newRepositoryHarness(t, askingGitHub(github), func(d *faucet.Deps) {
+		d.Redelivered = func(_ context.Context, id string) (bool, error) { return redelivered[id], nil }
 	})
 	deliver := func(event, delivery, body string) {
 		t.Helper()
@@ -228,25 +226,16 @@ func TestARedeliveredDeliveryMovesNoLogin(t *testing.T) {
 		t.Helper()
 		deliver("push", delivery, fmt.Sprintf(`{"ref":"refs/heads/main","repository":{"id":%d,"full_name":%q,"owner":{"id":%d,"login":%q}}}`, ownerID*10, login+"/private", ownerID, login))
 	}
-	owner := func(login string) (faucet.Owner, error) {
-		t.Helper()
-		return store.OwnerByLogin(context.Background(), login)
-	}
 
 	push("first", 7, "acme")
 	deliver("organization", "renamed", `{"action":"renamed","organization":{"id":7,"login":"acme-legacy"},"changes":{"login":{"from":"acme"}}}`)
+	clock.Advance(time.Minute)
 	push("before-rename", 7, "acme")
-	push("unknown", 7, "acme")
-	_, err := owner("acme")
-	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "a replay from before the rename does not give the old login back")
-	got, err := owner("acme-legacy")
-	require.NoError(t, err)
-	require.Equal(t, faucet.Owner{ID: 7, Login: "acme-legacy"}, got)
+	requireNoOwner(t, store, "acme")
+	requireOwner(t, store, "acme-legacy", 7)
 
 	push("first-of-octo", 9, "octo")
-	got, err = owner("octo")
-	require.NoError(t, err)
-	require.Equal(t, faucet.Owner{ID: 9, Login: "octo"}, got, "a replay adds an account that faucet has not seen")
+	requireOwner(t, store, "octo", 9)
 }
 
 // Nearly every delivery names an account under the login that faucet holds
@@ -254,7 +243,9 @@ func TestARedeliveredDeliveryMovesNoLogin(t *testing.T) {
 // and once for a delivery whose organization owns its repository.
 func TestADeliveryWritesTheLoginOfAnAccountOnlyWhenItChanged(t *testing.T) {
 	t.Parallel()
-	store, _, handler := newRepositoryHarness(t)
+	github := newNamesStub(t)
+	github.answer(userPath(7), githubUser(t, 7, "Acme"))
+	store, _, handler := newRepositoryHarness(t, askingGitHub(github))
 	n := 0
 	push := func(login string) {
 		t.Helper()
@@ -271,7 +262,7 @@ func TestADeliveryWritesTheLoginOfAnAccountOnlyWhenItChanged(t *testing.T) {
 	push("acme")
 	require.Equal(t, 1, store.ownerWriteCount(), "a login that faucet holds writes nothing")
 	push("Acme")
-	require.Equal(t, 2, store.ownerWriteCount(), "a login whose case changed is written as the delivery writes it")
+	require.Equal(t, 2, store.ownerWriteCount(), "a login whose case changed is written as GitHub writes it")
 	got, err := store.OwnerByLogin(context.Background(), "acme")
 	require.NoError(t, err)
 	require.Equal(t, faucet.Owner{ID: 7, Login: "Acme"}, got)
@@ -280,9 +271,7 @@ func TestADeliveryWritesTheLoginOfAnAccountOnlyWhenItChanged(t *testing.T) {
 // lifecycleBody is the body of a repository event that renamed or
 // transferred repository 5 to fullName, which the account ownerID holds.
 func lifecycleBody(action, fullName string, ownerID int64, changes string) []byte {
-	owner, name, _ := strings.Cut(fullName, "/")
-	return fmt.Appendf(nil, `{"action":%q,"changes":%s,"repository":{"id":5,"name":%q,"full_name":%q,"owner":{"id":%d,"login":%q}}}`,
-		action, changes, name, fullName, ownerID, owner)
+	return lifecycleBodyOf(5, action, fullName, ownerID, changes)
 }
 
 func renamedFromName(name string) string {
@@ -410,9 +399,12 @@ func TestAKeptOldRenameDoesNotGiveARepositoryANameBack(t *testing.T) {
 		requireUnbound(t, store, name)
 	}
 
-	// GitHub's next rename names the name that faucet held.
+	// A rename from the name that faucet held lifts no quarantine either,
+	// since its body can be a kept one too.
 	requireAcknowledged(t, handler, "repository", "d-4", lifecycleBody("renamed", "new/t", 20, renamedFromName("r")))
-	requireBoundTo(t, store, "new/t", faucet.Repository{ID: 5, OwnerID: 20, OwnerLogin: "new", FullName: "new/t"})
+	for _, name := range []string{"old/r", "old/s", "new/r", "new/t"} {
+		requireUnbound(t, store, name)
+	}
 }
 
 // GitHub signs the body of a delivery and nothing else, so whoever kept the

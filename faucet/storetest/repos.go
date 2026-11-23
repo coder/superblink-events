@@ -17,6 +17,7 @@ var repositorySubtests = []subtest{
 	{"RenameRepositoryMovesANameAndANewRepositoryCanTakeTheOldOne", renameRepositoryMovesANameAndANewRepositoryCanTakeTheOldOne},
 	{"ARenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate", aRenameFromANameTheRowDoesNotHoldQuarantinesItUnlessLate},
 	{"AKeptOldRenameGivesNoNameBack", aKeptOldRenameGivesNoNameBack},
+	{"AQuarantineOutlastsEveryRename", aQuarantineOutlastsEveryRename},
 	{"KeptRenamesThatChainGiveNoNameBack", keptRenamesThatChainGiveNoNameBack},
 	{"RenameRepositoryJudgesEachBodyOnce", renameRepositoryJudgesEachBodyOnce},
 	{"RenameRepositoryOfAnUnknownIDRecordsIt", renameRepositoryOfAnUnknownIDRecordsIt},
@@ -171,11 +172,31 @@ func aKeptOldRenameGivesNoNameBack(t *testing.T, s faucet.Store) {
 	requireUnknownName(t, s, "old/r")
 	requireUnknownName(t, s, "new/r")
 
-	// GitHub's next rename names the name that the row held before.
+	// A rename from the name that the row held lifts no quarantine.
 	next := faucet.Repository{ID: 1, OwnerID: 20, OwnerLogin: "new", FullName: "new/s"}
-	require.Equal(t, faucet.Renamed, renameDelivered(t, s, next, "new/r", repositoryTime.Add(2*time.Minute)))
-	requireRepositoryNamed(t, s, "new/s", next)
-	requireUnknownName(t, s, "old/r")
+	require.Equal(t, faucet.RenameQuarantined, renameDelivered(t, s, next, "new/r", repositoryTime.Add(2*time.Minute)))
+	for _, name := range []string{"old/r", "new/r", "new/s"} {
+		requireUnknownName(t, s, name)
+	}
+}
+
+// A rename that never reached the store leaves the row with the name from
+// before it, and the transfer after it quarantines the row. The missed
+// rename can then come fresh, as a body that the store never judged, from the
+// name that the row holds. It must not lift the quarantine: the store cannot
+// tell it from a kept body sent again, and lifting would bind its name to a
+// repository that moved away. Nor does a later one, late or not.
+func aQuarantineOutlastsEveryRename(t *testing.T, s faucet.Store) {
+	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
+	moved := faucet.Repository{ID: 1, OwnerID: 8, OwnerLogin: "acme", FullName: "acme/s"}
+	require.Equal(t, faucet.RenameQuarantined, renameDelivered(t, s, moved, "coder/s", repositoryTime.Add(time.Minute)))
+
+	missed := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
+	require.Equal(t, faucet.RenameQuarantined, renameAs(t, s, missed, repositoryTime.Add(2*time.Minute)))
+	require.Equal(t, faucet.RenameLate, renameAs(t, s, late(renameOf(repositoryNamed(1, "coder/t"), "coder/r", repositoryTime)), repositoryTime.Add(3*time.Minute)))
+	for _, name := range []string{"coder/r", "coder/s", "coder/t", "acme/s"} {
+		requireUnknownName(t, s, name)
+	}
 }
 
 // GitHub signs only the body of a delivery, so a body that the store judged
