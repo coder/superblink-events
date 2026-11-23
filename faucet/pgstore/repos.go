@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/faucet/faucet"
@@ -31,8 +32,8 @@ func (s *Store) RecordRepository(ctx context.Context, repo faucet.Repository, se
 // RenameRepository implements faucet.Store. The row of the body, which comes
 // first, makes a concurrent call with the same body wait, and then find it.
 // The lock of the repository orders concurrent calls for it, and holds one
-// connection while ask runs.
-func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRename, seenAt time.Time, ask func() (faucet.Repository, error)) (_ faucet.RenameOutcome, err error) {
+// connection while lookup.Ask runs.
+func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRename, seenAt time.Time, lookup faucet.Lookup[faucet.Repository]) (_ faucet.RenameOutcome, err error) {
 	defer func() { err = endedBy(ctx, err) }()
 	repo := rename.Repo
 	if err := repo.Validate(); err != nil {
@@ -51,10 +52,10 @@ func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRe
 	case recorded == 0:
 		return faucet.RenameSeenBefore, nil
 	}
-	if err := q.LockName(ctx, repositoryLock(repo.ID)); err != nil {
+	if err := lockName(ctx, tx, q, repositoryLock(repo.ID), max(lookup.Wait, time.Millisecond)); err != nil {
 		return 0, xerrors.Errorf("lock repository: %w", err)
 	}
-	outcome, err := renameLocked(ctx, q, rename, seenAt, ask)
+	outcome, err := renameLocked(ctx, q, rename, seenAt, lookup.Ask)
 	if err != nil {
 		return 0, err
 	}
@@ -65,7 +66,12 @@ func (s *Store) RenameRepository(ctx context.Context, rename faucet.RepositoryRe
 }
 
 func renameLocked(ctx context.Context, q *database.Queries, rename faucet.RepositoryRename, seenAt time.Time, ask func() (faucet.Repository, error)) (faucet.RenameOutcome, error) {
-	if current, err := ask(); err == nil && current.ID == rename.Repo.ID && current.Validate() == nil {
+	current, err := ask()
+	answered := err == nil && current.ID == rename.Repo.ID && current.Validate() == nil
+	if answered && strings.EqualFold(current.FullName, rename.From) && !strings.EqualFold(current.FullName, rename.Repo.FullName) {
+		return quarantineUnjudged(ctx, q, rename, current, seenAt)
+	}
+	if answered {
 		if err := recordOwner(ctx, q, faucet.Owner{ID: current.OwnerID, Login: current.OwnerLogin}); err != nil {
 			return 0, err
 		}
@@ -105,6 +111,52 @@ func renameLocked(ctx context.Context, q *database.Queries, rename faucet.Reposi
 	return outcome, nil
 }
 
+// quarantineUnjudged quarantines the repository of a rename whose body it
+// leaves unjudged, inserting a row of current when the store holds none.
+func quarantineUnjudged(ctx context.Context, q *database.Queries, rename faucet.RepositoryRename, current faucet.Repository, seenAt time.Time) (faucet.RenameOutcome, error) {
+	if err := q.ForgetRepositoryRename(ctx, rename.Body[:]); err != nil {
+		return 0, xerrors.Errorf("forget the body of the rename: %w", err)
+	}
+	if err := q.RecordRepository(ctx, database.RecordRepositoryParams{
+		RepoID: current.ID, OwnerID: current.OwnerID, OwnerLogin: current.OwnerLogin, FullName: current.FullName, SeenAt: seenAt,
+	}); err != nil {
+		return 0, xerrors.Errorf("record repository: %w", err)
+	}
+	if err := q.QuarantineRepository(ctx, database.QuarantineRepositoryParams{
+		RepoID: current.ID, SeenAt: sql.NullTime{Time: seenAt, Valid: true},
+	}); err != nil {
+		return 0, xerrors.Errorf("quarantine repository: %w", err)
+	}
+	return faucet.RenameQuarantined, nil
+}
+
+// lockName takes the lock of key for the transaction, waiting at most wait
+// when wait is positive, and returns faucet.ErrNameBusy when another
+// transaction holds it for longer.
+func lockName(ctx context.Context, tx *sql.Tx, q *database.Queries, key string, wait time.Duration) error {
+	if wait <= 0 {
+		return q.LockName(ctx, key)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL lock_timeout = %d", max(wait.Milliseconds(), 1))); err != nil {
+		return xerrors.Errorf("set the lock timeout: %w", err)
+	}
+	var pqErr *pq.Error
+	switch err := q.LockName(ctx, key); {
+	case xerrors.As(err, &pqErr) && pqErr.Code == lockNotAvailable:
+		return faucet.ErrNameBusy
+	case err != nil:
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "SET LOCAL lock_timeout TO DEFAULT"); err != nil {
+		return xerrors.Errorf("reset the lock timeout: %w", err)
+	}
+	return nil
+}
+
+// lockNotAvailable is Postgres's lock_not_available, which a lock wait past
+// lock_timeout ends with.
+const lockNotAvailable = "55P03"
+
 func repositoryLock(id int64) string { return fmt.Sprintf("faucet_repos:%d", id) }
 
 func ownerLock(id int64) string { return fmt.Sprintf("faucet_owners:%d", id) }
@@ -117,18 +169,21 @@ func (s *Store) RecordOwner(ctx context.Context, owner faucet.Owner) (err error)
 	if err := owner.Validate(); err != nil {
 		return xerrors.Errorf("validate owner: %w", err)
 	}
-	return s.inOwnerLock(ctx, owner.ID, func(q *database.Queries) error { return recordOwner(ctx, q, owner) })
+	return s.inOwnerLock(ctx, owner.ID, 0, func(q *database.Queries) error { return recordOwner(ctx, q, owner) })
 }
 
 // ConfirmOwner implements faucet.Store. The lock of the account holds one
-// connection while ask runs.
-func (s *Store) ConfirmOwner(ctx context.Context, owner faucet.Owner, ask func() (faucet.Owner, error)) (err error) {
+// connection while lookup.Ask runs.
+func (s *Store) ConfirmOwner(ctx context.Context, owner faucet.Owner, lookup faucet.Lookup[faucet.Owner]) (err error) {
 	defer func() { err = endedBy(ctx, err) }()
 	if err := owner.Validate(); err != nil {
 		return xerrors.Errorf("validate owner: %w", err)
 	}
-	return s.inOwnerLock(ctx, owner.ID, func(q *database.Queries) error {
-		if current, err := ask(); err == nil && current.ID == owner.ID && current.Validate() == nil {
+	return s.inOwnerLock(ctx, owner.ID, max(lookup.Wait, time.Millisecond), func(q *database.Queries) error {
+		if held, err := q.GetOwnerByID(ctx, owner.ID); err == nil && !held.Quarantined && held.Login == owner.Login {
+			return nil
+		}
+		if current, err := lookup.Ask(); err == nil && current.ID == owner.ID && current.Validate() == nil {
 			return recordOwner(ctx, q, current)
 		}
 		if err := q.QuarantineOwner(ctx, database.QuarantineOwnerParams{OwnerID: owner.ID, Login: owner.Login}); err != nil {
@@ -138,15 +193,16 @@ func (s *Store) ConfirmOwner(ctx context.Context, owner faucet.Owner, ask func()
 	})
 }
 
-// inOwnerLock runs fn in a transaction that holds the lock of the account.
-func (s *Store) inOwnerLock(ctx context.Context, id int64, fn func(*database.Queries) error) error {
+// inOwnerLock runs fn in a transaction that holds the lock of the account,
+// waiting for the lock as lockName does.
+func (s *Store) inOwnerLock(ctx context.Context, id int64, wait time.Duration, fn func(*database.Queries) error) error {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return xerrors.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.q.WithTx(tx)
-	if err := q.LockName(ctx, ownerLock(id)); err != nil {
+	if err := lockName(ctx, tx, q, ownerLock(id), wait); err != nil {
 		return xerrors.Errorf("lock owner: %w", err)
 	}
 	if err := fn(q); err != nil {

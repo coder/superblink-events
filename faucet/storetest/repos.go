@@ -24,6 +24,9 @@ var repositorySubtests = []subtest{
 	{"RenamesOfOneRepositoryAskGitHubInTurn", renamesOfOneRepositoryAskGitHubInTurn},
 	{"ConfirmOwnerTakesGitHubsLoginOrQuarantines", confirmOwnerTakesGitHubsLoginOrQuarantines},
 	{"LookupsOfOneAccountAskGitHubInTurn", lookupsOfOneAccountAskGitHubInTurn},
+	{"ConfirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin", confirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin},
+	{"AnAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged", anAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged},
+	{"ALookupThatWaitsTooLongForTheLockChangesNothing", aLookupThatWaitsTooLongForTheLockChangesNothing},
 	{"KeptRenamesThatChainGiveNoNameBack", keptRenamesThatChainGiveNoNameBack},
 	{"RenameRepositoryJudgesEachBodyOnce", renameRepositoryJudgesEachBodyOnce},
 	{"RenameRepositoryOfAnUnknownIDRecordsIt", renameRepositoryOfAnUnknownIDRecordsIt},
@@ -71,7 +74,7 @@ func renameOf(repo faucet.Repository, from string, at time.Time) faucet.Reposito
 func renameAs(t *testing.T, s faucet.Store, rename faucet.RepositoryRename, at time.Time) faucet.RenameOutcome {
 	t.Helper()
 	require.NoError(t, s.RecordOwner(context.Background(), faucet.Owner{ID: rename.Repo.OwnerID, Login: rename.Repo.OwnerLogin}))
-	outcome, err := s.RenameRepository(context.Background(), rename, at, noAnswer[faucet.Repository])
+	outcome, err := s.RenameRepository(context.Background(), rename, at, noLookup[faucet.Repository]())
 	require.NoError(t, err)
 	return outcome
 }
@@ -79,7 +82,7 @@ func renameAs(t *testing.T, s faucet.Store, rename faucet.RepositoryRename, at t
 // renameAnswered applies rename while GitHub names the repository answer.
 func renameAnswered(t *testing.T, s faucet.Store, rename faucet.RepositoryRename, at time.Time, answer faucet.Repository) faucet.RenameOutcome {
 	t.Helper()
-	outcome, err := s.RenameRepository(context.Background(), rename, at, func() (faucet.Repository, error) { return answer, nil })
+	outcome, err := s.RenameRepository(context.Background(), rename, at, answering(answer))
 	require.NoError(t, err)
 	return outcome
 }
@@ -88,6 +91,19 @@ func renameAnswered(t *testing.T, s faucet.Store, rename faucet.RepositoryRename
 func noAnswer[T any]() (T, error) {
 	var zero T
 	return zero, errNoAnswer
+}
+
+// lockWait is how long a lookup of the tests waits for the lock of a name.
+const lockWait = 10 * time.Second
+
+func noLookup[T any]() faucet.Lookup[T] { return faucet.Lookup[T]{Wait: lockWait, Ask: noAnswer[T]} }
+
+func answering[T any](answer T) faucet.Lookup[T] {
+	return faucet.Lookup[T]{Wait: lockWait, Ask: func() (T, error) { return answer, nil }}
+}
+
+func lookupBy[T any](ask func() (T, error)) faucet.Lookup[T] {
+	return faucet.Lookup[T]{Wait: lockWait, Ask: ask}
 }
 
 var errNoAnswer = xerrors.New("GitHub gave no answer")
@@ -192,10 +208,10 @@ func aRenameTakesGitHubsNamesAndLiftsAQuarantine(t *testing.T, s faucet.Store) {
 	for _, name := range []string{"coder/r", "coder/s", "acme/s"} {
 		requireUnknownName(t, s, name)
 	}
-	outcome, err := s.RenameRepository(ctx, missed, repositoryTime.Add(4*time.Minute), func() (faucet.Repository, error) {
+	outcome, err := s.RenameRepository(ctx, missed, repositoryTime.Add(4*time.Minute), lookupBy(func() (faucet.Repository, error) {
 		t.Error("GitHub is asked about a body that the store judged")
 		return answer, nil
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, faucet.RenameSeenBefore, outcome)
 
@@ -215,23 +231,23 @@ func renamesOfOneRepositoryAskGitHubInTurn(t *testing.T, s faucet.Store) {
 	asking, release := make(chan struct{}), make(chan struct{})
 	first := make(chan error, 1)
 	go func() {
-		_, err := s.RenameRepository(ctx, renameOf(older, "coder/r", repositoryTime), repositoryTime, func() (faucet.Repository, error) {
+		_, err := s.RenameRepository(ctx, renameOf(older, "coder/r", repositoryTime), repositoryTime, lookupBy(func() (faucet.Repository, error) {
 			close(asking)
 			<-release
 			return older, nil
-		})
+		}))
 		first <- err
 	}()
 	<-asking
 	var firstDone atomic.Bool
 	second := make(chan error, 1)
 	go func() {
-		_, err := s.RenameRepository(ctx, renameOf(newer, "coder/s", repositoryTime), repositoryTime, func() (faucet.Repository, error) {
+		_, err := s.RenameRepository(ctx, renameOf(newer, "coder/s", repositoryTime), repositoryTime, lookupBy(func() (faucet.Repository, error) {
 			if !firstDone.Load() {
 				t.Error("the store asked about the second rename before it wrote the first answer")
 			}
 			return newer, nil
-		})
+		}))
 		second <- err
 	}()
 	time.Sleep(100 * time.Millisecond)
@@ -253,7 +269,7 @@ func confirmOwnerTakesGitHubsLoginOrQuarantines(t *testing.T, s faucet.Store) {
 	recordDelivered(t, s, faucet.Repository{ID: 1, OwnerID: 7, OwnerLogin: "acme", FullName: "acme/tap"}, repositoryTime)
 	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 9, Login: "octo"}))
 
-	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, noAnswer[faucet.Owner]))
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, noLookup[faucet.Owner]()))
 	for _, login := range []string{"acme", "octo"} {
 		_, err := s.OwnerByLogin(ctx, login)
 		require.ErrorIs(t, err, faucet.ErrUnknownOwner, login)
@@ -274,10 +290,10 @@ func confirmOwnerTakesGitHubsLoginOrQuarantines(t *testing.T, s faucet.Store) {
 	require.NoError(t, err)
 	require.True(t, added)
 
-	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, func() (faucet.Owner, error) { return faucet.Owner{ID: 8, Login: "acme"}, nil }))
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, answering(faucet.Owner{ID: 8, Login: "acme"})))
 	_, err = s.OwnerByID(ctx, 7)
 	require.ErrorIs(t, err, faucet.ErrQuarantinedOwner, "an answer of another account is no answer")
-	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, func() (faucet.Owner, error) { return faucet.Owner{ID: 7, Login: "Acme"}, nil }))
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "octo"}, answering(faucet.Owner{ID: 7, Login: "Acme"})))
 	got, err = s.OwnerByLogin(ctx, "acme")
 	require.NoError(t, err)
 	require.Equal(t, faucet.Owner{ID: 7, Login: "Acme"}, got)
@@ -294,22 +310,22 @@ func lookupsOfOneAccountAskGitHubInTurn(t *testing.T, s faucet.Store) {
 	asking, release := make(chan struct{}), make(chan struct{})
 	first := make(chan error, 1)
 	go func() {
-		first <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, func() (faucet.Owner, error) {
+		first <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, lookupBy(func() (faucet.Owner, error) {
 			close(asking)
 			<-release
 			return faucet.Owner{ID: 7, Login: "acme"}, nil
-		})
+		}))
 	}()
 	<-asking
 	var firstDone atomic.Bool
 	second := make(chan error, 1)
 	go func() {
-		second <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, func() (faucet.Owner, error) {
+		second <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "acme-new"}, lookupBy(func() (faucet.Owner, error) {
 			if !firstDone.Load() {
 				t.Error("the store asked about the account again before it wrote the first answer")
 			}
 			return faucet.Owner{ID: 7, Login: "acme-new"}, nil
-		})
+		}))
 	}()
 	time.Sleep(100 * time.Millisecond)
 	firstDone.Store(true)
@@ -319,6 +335,91 @@ func lookupsOfOneAccountAskGitHubInTurn(t *testing.T, s faucet.Store) {
 	got, err := s.OwnerByLogin(ctx, "acme-new")
 	require.NoError(t, err)
 	require.Equal(t, faucet.Owner{ID: 7, Login: "acme-new"}, got)
+}
+
+// Deliveries that come at once after a rename all name the new login. The
+// first one's answer gives it, and the others, which waited for the lock,
+// find it and ask nothing.
+func confirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	require.NoError(t, s.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "new"}))
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "new"}, lookupBy(func() (faucet.Owner, error) {
+		t.Error("the store asked about an account that holds the login")
+		return faucet.Owner{}, errNoAnswer
+	})))
+	got, err := s.OwnerByID(ctx, 7)
+	require.NoError(t, err)
+	require.Equal(t, faucet.Owner{ID: 7, Login: "new"}, got)
+
+	require.NoError(t, s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "new"}, noLookup[faucet.Owner]()))
+	_, err = s.OwnerByID(ctx, 7)
+	require.NoError(t, err, "a call that asks nothing quarantines nothing")
+}
+
+// GitHub can answer with the name that a rename moved the repository from,
+// either lagging behind the rename or because GitHub undid a rename whose
+// body someone kept. The store binds neither name and leaves the body
+// unjudged, so that GitHub's next delivery of it asks again.
+func anAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged(t *testing.T, s faucet.Store) {
+	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
+	rename := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
+	require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, rename, repositoryTime.Add(time.Minute), repositoryNamed(1, "coder/r")))
+	requireUnknownName(t, s, "coder/r")
+	requireUnknownName(t, s, "coder/s")
+
+	require.Equal(t, faucet.RenameConfirmed, renameAnswered(t, s, rename, repositoryTime.Add(2*time.Minute), repositoryNamed(1, "coder/s")))
+	requireRepositoryNamed(t, s, "coder/s", repositoryNamed(1, "coder/s"))
+
+	unseen := renameOf(repositoryNamed(2, "coder/b"), "coder/a", repositoryTime)
+	require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, unseen, repositoryTime.Add(3*time.Minute), repositoryNamed(2, "coder/a")))
+	requireUnknownName(t, s, "coder/a")
+	requireUnknownName(t, s, "coder/b")
+}
+
+// A lookup that waits for another one's lock longer than its Wait gives up
+// with ErrNameBusy and changes nothing, so that it stays within its budget.
+func aLookupThatWaitsTooLongForTheLockChangesNothing(t *testing.T, s faucet.Store) {
+	ctx := context.Background()
+	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
+	asking, release := make(chan struct{}), make(chan struct{})
+	held := make(chan error, 2)
+	go func() {
+		_, err := s.RenameRepository(ctx, renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime), repositoryTime, lookupBy(func() (faucet.Repository, error) {
+			close(asking)
+			<-release
+			return faucet.Repository{}, errNoAnswer
+		}))
+		held <- err
+	}()
+	<-asking
+	go func() {
+		held <- s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "coder-new"}, lookupBy(func() (faucet.Owner, error) {
+			<-release
+			return faucet.Owner{}, errNoAnswer
+		}))
+	}()
+
+	busy := renameOf(repositoryNamed(1, "coder/t"), "coder/r", repositoryTime)
+	short := func(t *testing.T) faucet.Lookup[faucet.Repository] {
+		return faucet.Lookup[faucet.Repository]{Wait: 50 * time.Millisecond, Ask: func() (faucet.Repository, error) {
+			t.Error("the store asked without the lock")
+			return faucet.Repository{}, errNoAnswer
+		}}
+	}
+	_, err := s.RenameRepository(ctx, busy, repositoryTime, short(t))
+	require.ErrorIs(t, err, faucet.ErrNameBusy)
+	require.Eventually(t, func() bool {
+		err := s.ConfirmOwner(ctx, faucet.Owner{ID: 7, Login: "coder-other"}, faucet.Lookup[faucet.Owner]{Wait: 50 * time.Millisecond, Ask: noAnswer[faucet.Owner]})
+		return xerrors.Is(err, faucet.ErrNameBusy)
+	}, 5*time.Second, 10*time.Millisecond)
+	close(release)
+	require.NoError(t, <-held)
+	require.NoError(t, <-held)
+	got, err := s.OwnerByLogin(ctx, "coder")
+	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "the lookup that held the lock got no answer")
+	require.Zero(t, got)
+
+	require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, busy, repositoryTime, repositoryNamed(1, "coder/r")), "the body that gave up is not judged")
 }
 
 // Two kept bodies that chain, a rename to a name and a rename from it, give
@@ -431,7 +532,7 @@ func recordAndRenameRepositoryValidateInput(t *testing.T, s faucet.Store) {
 		{ID: 1, OwnerID: 7, OwnerLogin: "coder", FullName: "coder/fau\x00cet"},
 	} {
 		require.Error(t, s.RecordRepository(ctx, bad, repositoryTime), "%+v", bad)
-		_, err := s.RenameRepository(ctx, faucet.RepositoryRename{Repo: bad, From: "coder/faucet", Body: refused.Body}, repositoryTime, noAnswer[faucet.Repository])
+		_, err := s.RenameRepository(ctx, faucet.RepositoryRename{Repo: bad, From: "coder/faucet", Body: refused.Body}, repositoryTime, noLookup[faucet.Repository]())
 		require.Error(t, err, "%+v", bad)
 	}
 	requireUnknownName(t, s, "coder/faucet")

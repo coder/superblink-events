@@ -33,6 +33,16 @@ func (q *Queries) AddOwner(ctx context.Context, arg AddOwnerParams) (int64, erro
 	return result.RowsAffected()
 }
 
+const forgetRepositoryRename = `-- name: ForgetRepositoryRename :exec
+DELETE FROM faucet_repo_renames WHERE body_sha256 = $1
+`
+
+// The body is left for a later delivery of it to judge.
+func (q *Queries) ForgetRepositoryRename(ctx context.Context, bodySha256 []byte) error {
+	_, err := q.db.ExecContext(ctx, forgetRepositoryRename, bodySha256)
+	return err
+}
+
 const getOwnerByID = `-- name: GetOwnerByID :one
 SELECT owner_id, login, (quarantined_at IS NOT NULL)::boolean AS quarantined
 FROM faucet_owners

@@ -52,7 +52,7 @@ type fakeStore struct {
 	owners        map[int64]fakeRepoOwner
 	// nameLocks are the locks of accounts and repositories that the store
 	// holds while it asks GitHub.
-	nameLocks   map[string]*sync.Mutex
+	nameLocks   map[string]chan struct{}
 	ownerWrites int
 	repoWrites  int
 	// repoErr fails UpsertRepository and RepositoryByName.

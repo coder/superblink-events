@@ -26,12 +26,20 @@ const (
 	// most. GitHub gives a client with no token 60 requests an hour, and
 	// every delivery that names an old login would ask.
 	accountAskInterval = time.Minute
+	// maxConcurrentLookups is how many lookups one process runs at once. Each
+	// holds a database connection while GitHub answers, and cmd/faucet's pool
+	// holds 10, so a hanging GitHub cannot take the connections that other
+	// deliveries need.
+	maxConcurrentLookups = 4
 )
 
 var (
 	// errAskedRecently says that faucet asked GitHub about the account less
 	// than accountAskInterval ago.
 	errAskedRecently = xerrors.New("faucet asked GitHub about the account less than a minute ago")
+	// errNoLookupSlot says that the process ran maxConcurrentLookups lookups
+	// for the whole budget of the delivery.
+	errNoLookupSlot = xerrors.New("faucet asked GitHub as often at once as it may for the whole time it may wait")
 	// errGitHubNotFound is GitHub's 404: no such account, or a repository
 	// that is private or deleted, which GitHub does not tell apart for a
 	// client with no token.
@@ -48,6 +56,8 @@ type githubNames struct {
 	client *http.Client
 	clock  quartz.Clock
 
+	slots chan struct{}
+
 	mu    sync.Mutex
 	asked map[int64]time.Time
 }
@@ -57,11 +67,12 @@ func newGitHubNames(apiURL string, client *http.Client, clock quartz.Clock) (*gi
 	if err != nil {
 		return nil, err
 	}
-	return &githubNames{base: base, client: client, clock: clock, asked: map[int64]time.Time{}}, nil
+	return &githubNames{base: base, client: client, clock: clock, slots: make(chan struct{}, maxConcurrentLookups), asked: map[int64]time.Time{}}, nil
 }
 
 // asks returns the lookups of one delivery, which end githubAskBudget after
-// the first one starts. The caller calls done.
+// the first one starts, waits for a slot and for the lock of the name
+// included. The caller calls done.
 func (g *githubNames) asks(ctx context.Context) *deliveryAsks {
 	return &deliveryAsks{names: g, parent: ctx}
 }
@@ -70,6 +81,7 @@ type deliveryAsks struct {
 	names  *githubNames
 	parent context.Context
 	ctx    context.Context
+	until  time.Time
 	stop   func()
 }
 
@@ -77,9 +89,28 @@ func (a *deliveryAsks) context() context.Context {
 	if a.ctx == nil {
 		ctx, cancel := context.WithCancel(a.parent)
 		timer := a.names.clock.AfterFunc(githubAskBudget, cancel)
-		a.ctx, a.stop = ctx, func() { timer.Stop(); cancel() }
+		a.ctx, a.until, a.stop = ctx, a.names.clock.Now().Add(githubAskBudget), func() { timer.Stop(); cancel() }
 	}
 	return a.ctx
+}
+
+// lookupOf waits, within the budget, for one of the process's lookup slots,
+// and gives the store what is left of the budget to wait for the lock of the
+// name. The caller calls release once the store returns. A lookup that got no
+// slot asks GitHub nothing.
+func lookupOf[T any](a *deliveryAsks, ask func() (T, error)) (lookup Lookup[T], release func()) {
+	ctx := a.context()
+	select {
+	case a.names.slots <- struct{}{}:
+		release = func() { <-a.names.slots }
+	case <-ctx.Done():
+		release = func() {}
+		ask = func() (T, error) {
+			var zero T
+			return zero, errNoLookupSlot
+		}
+	}
+	return Lookup[T]{Wait: a.until.Sub(a.names.clock.Now()), Ask: ask}, release
 }
 
 func (a *deliveryAsks) done() {

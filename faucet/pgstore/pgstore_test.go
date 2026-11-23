@@ -455,9 +455,9 @@ func TestTheOwnerQuarantineMigrationDropsQuarantinedAccountsDownAndKeepsTheRestU
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "acme"}))
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 9, Login: "octo"}))
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 11, Login: "acme"}))
-	require.NoError(t, store.ConfirmOwner(ctx, faucet.Owner{ID: 13, Login: "octo"}, func() (faucet.Owner, error) {
+	require.NoError(t, store.ConfirmOwner(ctx, faucet.Owner{ID: 13, Login: "octo"}, faucet.Lookup[faucet.Owner]{Wait: time.Second, Ask: func() (faucet.Owner, error) {
 		return faucet.Owner{}, xerrors.New("GitHub gave no answer")
-	}))
+	}}))
 	count := func() (n int) {
 		t.Helper()
 		require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM faucet_owners`).Scan(&n))
@@ -976,8 +976,8 @@ func TestRepositoryCallThatItsContextCutShortWrapsTheContextError(t *testing.T) 
 	for name, call := range map[string]func(context.Context) error{
 		"RecordRepository": func(ctx context.Context) error { return store.RecordRepository(ctx, repo, time.Now()) },
 		"RenameRepository": func(ctx context.Context) error {
-			_, err := store.RenameRepository(ctx, faucet.RepositoryRename{Repo: repo, From: "coder/tap"}, time.Now(), func() (faucet.Repository, error) {
-				return faucet.Repository{}, faucet.ErrUnknownRepository
+			_, err := store.RenameRepository(ctx, faucet.RepositoryRename{Repo: repo, From: "coder/tap"}, time.Now(), faucet.Lookup[faucet.Repository]{
+				Wait: time.Second, Ask: func() (faucet.Repository, error) { return faucet.Repository{}, faucet.ErrUnknownRepository },
 			})
 			return err
 		},

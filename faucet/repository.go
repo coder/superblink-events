@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/xerrors"
 
@@ -19,6 +20,20 @@ var ErrUnknownRepository = xerrors.New("no delivery has named the repository")
 // ErrUnknownOwner means the store has seen no delivery that names a
 // repository of the owner.
 var ErrUnknownOwner = xerrors.New("no delivery has named a repository of the owner")
+
+// ErrNameBusy means that a store did not get the lock of an account or a
+// repository within Lookup.Wait, because another delivery was asking GitHub
+// about it.
+var ErrNameBusy = xerrors.New("another delivery is asking GitHub about the account or the repository")
+
+// Lookup is a question to GitHub about the names of an account or a
+// repository now. A store calls Ask while it holds the lock of the account or
+// the repository, and waits at most Wait for the lock, so that the step stays
+// within the budget of the delivery's lookups.
+type Lookup[T any] struct {
+	Wait time.Duration
+	Ask  func() (T, error)
+}
 
 // ErrQuarantinedOwner means that a delivery named the account under a login
 // that GitHub did not confirm, so the account holds no login until GitHub
@@ -156,8 +171,10 @@ func (s *Service) recordRepository(ctx context.Context, logger slog.Logger, even
 func (s *Service) renameRepository(ctx context.Context, logger slog.Logger, deliveryID string, rename RepositoryRename, asks *deliveryAsks) error {
 	logger = logger.With(slog.F("repo_id", rename.Repo.ID))
 	rename.Late = s.replayed(ctx, logger, deliveryID)
-	outcome, err := s.store.RenameRepository(ctx, rename, s.clock.Now(), func() (Repository, error) {
-		current, err := asks.repository(rename.Repo.ID)
+	lookup, release := lookupOf(asks, func() (Repository, error) { return asks.repository(rename.Repo.ID) })
+	defer release()
+	outcome, err := s.store.RenameRepository(ctx, rename, s.clock.Now(), Lookup[Repository]{Wait: lookup.Wait, Ask: func() (Repository, error) {
+		current, err := lookup.Ask()
 		switch {
 		case err == nil:
 		case xerrors.Is(err, errGitHubNotFound):
@@ -166,7 +183,7 @@ func (s *Service) renameRepository(ctx context.Context, logger slog.Logger, deli
 			logger.Warn(ctx, "GitHub gave no names for the repository, so faucet judges the rename by the name that it holds", slog.Error(err))
 		}
 		return current, err
-	})
+	}})
 	if err != nil {
 		return xerrors.Errorf("rename the repository: %w", err)
 	}
@@ -203,7 +220,9 @@ func renamesRepository(eventName, action string) bool {
 // account and writes the login that GitHub gives it (Store.ConfirmOwner).
 // When GitHub does not answer, neither login resolves until a later delivery
 // of the account gets an answer. Faucet asks about one account at most once a
-// minute, and a delivery within that minute gets no answer.
+// minute, and a delivery within that minute gets no answer. A delivery that
+// waited for another one's lookup of the account finds the login that GitHub
+// gave, and asks nothing.
 func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Owner, asks *deliveryAsks) {
 	held, err := s.store.OwnerByID(ctx, owner.ID)
 	switch {
@@ -221,15 +240,20 @@ func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Own
 		logger.Warn(ctx, "could not read the owner", slog.Error(err))
 		return
 	}
-	err = s.store.ConfirmOwner(ctx, owner, func() (Owner, error) {
-		current, err := asks.account(owner.ID)
+	lookup, release := lookupOf(asks, func() (Owner, error) { return asks.account(owner.ID) })
+	defer release()
+	err = s.store.ConfirmOwner(ctx, owner, Lookup[Owner]{Wait: lookup.Wait, Ask: func() (Owner, error) {
+		current, err := lookup.Ask()
 		if err != nil {
 			logger.Warn(ctx, "GitHub did not give the account a login, so it and the account that holds the delivered login hold none until GitHub gives one",
 				slog.F("owner_id", owner.ID), slog.Error(err))
 		}
 		return current, err
-	})
-	if err != nil {
+	}})
+	switch {
+	case xerrors.Is(err, ErrNameBusy):
+		logger.Info(ctx, "another delivery is asking GitHub about the account, so this one changes nothing", slog.F("owner_id", owner.ID))
+	case err != nil:
 		logger.Warn(ctx, "could not record the owner", slog.Error(err))
 	}
 }

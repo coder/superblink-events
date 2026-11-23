@@ -9,6 +9,10 @@ INSERT INTO faucet_repo_renames (body_sha256, repo_id, seen_at)
 VALUES (@body_sha256, @repo_id, @seen_at)
 ON CONFLICT (body_sha256) DO NOTHING;
 
+-- name: ForgetRepositoryRename :exec
+-- The body is left for a later delivery of it to judge.
+DELETE FROM faucet_repo_renames WHERE body_sha256 = @body_sha256;
+
 -- name: LockName :exec
 -- Holds a lock of the account or the repository that key names until the
 -- transaction ends, so that GitHub's answers for one are written in the order

@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -48,24 +47,30 @@ func (s *fakeStore) RecordRepository(_ context.Context, repo faucet.Repository, 
 	})
 }
 
-// lockName holds the lock of key until the func that it returns runs, as
-// the advisory lock of pgstore does.
-func (s *fakeStore) lockName(key string) func() {
+// lockName takes the lock of key, waiting at most wait, as the advisory lock
+// of pgstore does, and returns the func that releases it.
+func (s *fakeStore) lockName(key string, wait time.Duration) (func(), bool) {
 	s.mu.Lock()
 	if s.nameLocks == nil {
-		s.nameLocks = map[string]*sync.Mutex{}
+		s.nameLocks = map[string]chan struct{}{}
 	}
 	l, ok := s.nameLocks[key]
 	if !ok {
-		l = &sync.Mutex{}
+		l = make(chan struct{}, 1)
 		s.nameLocks[key] = l
 	}
 	s.mu.Unlock()
-	l.Lock()
-	return l.Unlock
+	timeout := time.NewTimer(max(wait, time.Millisecond))
+	defer timeout.Stop()
+	select {
+	case l <- struct{}{}:
+		return func() { <-l }, true
+	case <-timeout.C:
+		return nil, false
+	}
 }
 
-func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.RepositoryRename, seenAt time.Time, ask func() (faucet.Repository, error)) (faucet.RenameOutcome, error) {
+func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.RepositoryRename, seenAt time.Time, lookup faucet.Lookup[faucet.Repository]) (faucet.RenameOutcome, error) {
 	seen := false
 	if err := s.writeRepository(rename.Repo, func() {
 		seen = s.renameBodies[rename.Body]
@@ -76,13 +81,29 @@ func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.Repository
 	}); err != nil || seen {
 		return faucet.RenameSeenBefore, err
 	}
-	unlock := s.lockName(fmt.Sprintf("repo:%d", rename.Repo.ID))
+	unlock, ok := s.lockName(fmt.Sprintf("repo:%d", rename.Repo.ID), lookup.Wait)
+	if !ok {
+		s.mu.Lock()
+		delete(s.renameBodies, rename.Body)
+		s.mu.Unlock()
+		return 0, faucet.ErrNameBusy
+	}
 	defer unlock()
-	current, err := ask()
+	current, err := lookup.Ask()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.repos, func(r fakeRepo) bool { return r.repo.ID == rename.Repo.ID })
-	if err == nil && current.ID == rename.Repo.ID && current.Validate() == nil {
+	answered := err == nil && current.ID == rename.Repo.ID && current.Validate() == nil
+	switch {
+	case answered && strings.EqualFold(current.FullName, rename.From) && !strings.EqualFold(current.FullName, rename.Repo.FullName):
+		delete(s.renameBodies, rename.Body)
+		if i < 0 {
+			s.repos = append(s.repos, fakeRepo{repo: current, seenAt: seenAt})
+			i = len(s.repos) - 1
+		}
+		s.repos[i].quarantined = true
+		return faucet.RenameQuarantined, nil
+	case answered:
 		s.recordOwnerLocked(faucet.Owner{ID: current.OwnerID, Login: current.OwnerLogin})
 		if i >= 0 {
 			s.repos = slices.Delete(s.repos, i, i+1)
@@ -141,13 +162,22 @@ func (s *fakeStore) RecordOwner(_ context.Context, owner faucet.Owner) error {
 	return nil
 }
 
-func (s *fakeStore) ConfirmOwner(_ context.Context, owner faucet.Owner, ask func() (faucet.Owner, error)) error {
+func (s *fakeStore) ConfirmOwner(_ context.Context, owner faucet.Owner, lookup faucet.Lookup[faucet.Owner]) error {
 	if err := owner.Validate(); err != nil {
 		return err
 	}
-	unlock := s.lockName(fmt.Sprintf("owner:%d", owner.ID))
+	unlock, ok := s.lockName(fmt.Sprintf("owner:%d", owner.ID), lookup.Wait)
+	if !ok {
+		return faucet.ErrNameBusy
+	}
 	defer unlock()
-	current, err := ask()
+	s.mu.Lock()
+	held, found := s.owners[owner.ID]
+	s.mu.Unlock()
+	if found && !held.quarantined && held.login == owner.Login {
+		return nil
+	}
+	current, err := lookup.Ask()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.repoWrites++

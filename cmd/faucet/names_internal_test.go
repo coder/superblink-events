@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -230,6 +231,7 @@ func TestDeliveriesThatAskAHangingGitHubAnswerInTime(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	_, bystander := srv.timedPost(t, "push", "bystander", pushOf(1000, "r", 1000, "o0"))
 	wg.Wait()
+	t.Logf("slowest of %d deliveries that asked: %v; a delivery that asked nothing: %v", n, slices.Max(times), bystander)
 	require.Less(t, bystander, 1500*time.Millisecond, "a delivery that asks GitHub nothing")
 	for i, took := range times {
 		require.Less(t, took, 5500*time.Millisecond, "delivery %d", i)

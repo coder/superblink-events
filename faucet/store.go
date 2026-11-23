@@ -375,15 +375,22 @@ type Store interface {
 	RecordRepository(ctx context.Context, repo Repository, seenAt time.Time) error
 	// RenameRepository applies a repository event that renamed or transferred
 	// a repository, and judges each body once: a rename whose Body it judged
-	// before changes nothing (RenameSeenBefore) and calls no ask, so a replay
+	// before changes nothing (RenameSeenBefore) and asks nothing, so a replay
 	// of a transfer cannot give the repository a name back after it returned
-	// to the name that the transfer moved it from. Otherwise it calls ask,
-	// which asks GitHub for the repository's names now, while it holds the
-	// lock of rename.Repo.ID, so that two calls for one repository write
-	// GitHub's answers in the order in which they asked. An answer gives the
-	// row of the ID the answer's names, inserting one when it holds none, and
-	// the answer's owner its login as RecordOwner does, and lifts a quarantine
-	// (RenameConfirmed). An error from ask leaves the names to the rename:
+	// to the name that the transfer moved it from. Otherwise it calls
+	// lookup.Ask, which asks GitHub for the repository's names now, while it
+	// holds the lock of rename.Repo.ID, so that two calls for one repository
+	// write GitHub's answers in the order in which they asked. When another
+	// call holds the lock for longer than lookup.Wait, it returns ErrNameBusy
+	// and records nothing. An answer gives the row of the ID the answer's
+	// names, inserting one when it holds none, and the answer's owner its
+	// login as RecordOwner does, and lifts a quarantine (RenameConfirmed). An
+	// answer that gives rename.From and not the rename's own name can be
+	// GitHub lagging behind the rename or a kept rename that GitHub undid
+	// since, so it quarantines the row, inserting one when it holds none, and
+	// leaves the body unjudged (RenameQuarantined), so that GitHub's next
+	// delivery of it asks again. An error from Ask leaves the names to the
+	// rename:
 	// with no row of rename.Repo.ID, it inserts one (Renamed). When the row's
 	// full name is rename.From, ignoring case, either as the row holds it or
 	// under the login that the row's owner holds now, it gives the row the
@@ -402,7 +409,7 @@ type Store interface {
 	// transaction as the names, and a failed call records neither. It calls
 	// rename.Repo.Validate, and takes an answer that is not valid, or of
 	// another ID, as an error.
-	RenameRepository(ctx context.Context, rename RepositoryRename, seenAt time.Time, ask func() (Repository, error)) (RenameOutcome, error)
+	RenameRepository(ctx context.Context, rename RepositoryRename, seenAt time.Time, lookup Lookup[Repository]) (RenameOutcome, error)
 	// RecordOwner records that GitHub gives the account owner.ID the login
 	// owner.Login, and lifts its quarantine. The account keeps the login of
 	// its latest call, because GitHub sends no event for each repository of
@@ -416,16 +423,20 @@ type Store interface {
 	// GitHub signed it, so it may add an account but must move no login. It
 	// calls owner.Validate.
 	AddOwner(ctx context.Context, owner Owner) (bool, error)
-	// ConfirmOwner calls ask, which asks GitHub for the login of the account
-	// owner.ID now, while it holds the lock of the account, so that two calls
-	// for one account write GitHub's answers in the order in which they
-	// asked. An answer is recorded as RecordOwner records it. An error
+	// ConfirmOwner calls lookup.Ask, which asks GitHub for the login of the
+	// account owner.ID now, while it holds the lock of the account, so that
+	// two calls for one account write GitHub's answers in the order in which
+	// they asked. When another call holds the lock for longer than
+	// lookup.Wait, it returns ErrNameBusy and changes nothing. When, with the
+	// lock, the account holds owner.Login and is not quarantined, as after a
+	// call that GitHub answered for the same login, it asks nothing. An
+	// answer is recorded as RecordOwner records it. An error
 	// quarantines the account owner.ID and the account that holds
 	// owner.Login: owner is a delivery's name for the account, which the
 	// store cannot check, so neither login resolves until GitHub gives one.
 	// It calls owner.Validate, and takes an answer that is not valid, or of
 	// another ID, as an error.
-	ConfirmOwner(ctx context.Context, owner Owner, ask func() (Owner, error)) error
+	ConfirmOwner(ctx context.Context, owner Owner, lookup Lookup[Owner]) error
 	// OwnerByID returns the account of id with the login that the store
 	// holds for it, ErrUnknownOwner when it holds no row of it, and
 	// ErrQuarantinedOwner with the account and the last login that it held

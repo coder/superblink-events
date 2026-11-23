@@ -381,9 +381,10 @@ func TestAMissedRenameSentAgainLiftsNoQuarantine(t *testing.T) {
 
 // A transfer whose body faucet never judged, such as one signed before faucet
 // kept the bodies it judged, can come again after the repository came back to
-// the name that the transfer moved it from. For a public repository faucet
-// takes GitHub's names, not the body's, so the transfer gives the repository
-// no name back.
+// the name that the transfer moved it from. GitHub then names the repository
+// by that name, which an answer that lags the transfer gives too, so faucet
+// binds neither name and leaves the body unjudged: the transfer gives the
+// repository no name back.
 func TestAKeptTransferGivesAPublicRepositoryNoNameBack(t *testing.T) {
 	t.Parallel()
 	github := newNamesStub(t)
@@ -404,12 +405,15 @@ func TestAKeptTransferGivesAPublicRepositoryNoNameBack(t *testing.T) {
 
 	neverJudged := fmt.Appendf(nil, `{"action":"transferred","changes":%s,"repository":{"id":%d,"name":"superblink-events","full_name":"acme/superblink-events","owner":{"id":%d,"login":"acme"}},"sender":{"login":"someone"}}`,
 		transferredFromOrg("coder"), publicRepoID, acmeID)
-	for i, body := range [][]byte{away, neverJudged} {
-		clock.Advance(time.Minute)
-		requireAcknowledged(t, handler, "repository", fmt.Sprintf("replay-%d", i), body)
-		requireBoundTo(t, store, "coder/superblink-events", atCoder)
-		requireUnbound(t, store, "acme/superblink-events")
-	}
+	clock.Advance(time.Minute)
+	requireAcknowledged(t, handler, "repository", "replay-0", away)
+	requireBoundTo(t, store, "coder/superblink-events", atCoder)
+	requireUnbound(t, store, "acme/superblink-events")
+
+	clock.Advance(time.Minute)
+	requireAcknowledged(t, handler, "repository", "replay-1", neverJudged)
+	requireUnbound(t, store, "acme/superblink-events")
+	requireUnbound(t, store, "coder/superblink-events")
 }
 
 // While an account holds no login because GitHub did not confirm one, every
