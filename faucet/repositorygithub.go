@@ -49,14 +49,7 @@ type githubNames struct {
 	clock  quartz.Clock
 
 	mu    sync.Mutex
-	asked map[int64]askedAccount
-}
-
-// askedAccount is when faucet last asked GitHub about an account, and the
-// login that GitHub gave, empty when it gave none.
-type askedAccount struct {
-	at    time.Time
-	login string
+	asked map[int64]time.Time
 }
 
 func newGitHubNames(apiURL string, client *http.Client, clock quartz.Clock) (*githubNames, error) {
@@ -64,7 +57,7 @@ func newGitHubNames(apiURL string, client *http.Client, clock quartz.Clock) (*gi
 	if err != nil {
 		return nil, err
 	}
-	return &githubNames{base: base, client: client, clock: clock, asked: map[int64]askedAccount{}}, nil
+	return &githubNames{base: base, client: client, clock: clock, asked: map[int64]time.Time{}}, nil
 }
 
 // asks returns the lookups of one delivery, which end githubAskBudget after
@@ -96,18 +89,10 @@ func (a *deliveryAsks) done() {
 }
 
 // account returns the account id with the login that GitHub gives it now.
-// When faucet asked less than accountAskInterval ago, it returns
-// errAskedRecently and the login that GitHub gave then, if any.
 func (a *deliveryAsks) account(id int64) (Owner, error) {
-	if last, recent := a.names.lastAsked(id); recent {
-		return Owner{ID: id, Login: last.login}, errAskedRecently
+	if !a.names.mayAsk(id) {
+		return Owner{}, errAskedRecently
 	}
-	owner, err := a.askAccount(id)
-	a.names.answered(id, owner.Login)
-	return owner, err
-}
-
-func (a *deliveryAsks) askAccount(id int64) (Owner, error) {
 	var body struct {
 		ID    int64  `json:"id"`
 		Login string `json:"login"`
@@ -143,30 +128,18 @@ func (a *deliveryAsks) repository(id int64) (Repository, error) {
 	return repo, nil
 }
 
-// lastAsked returns when faucet last asked about the account id, and whether
-// that was less than accountAskInterval ago. When it was not, it records that
-// faucet asks now.
-func (g *githubNames) lastAsked(id int64) (askedAccount, bool) {
+// mayAsk records that faucet asks about the account id now, unless it did so
+// less than accountAskInterval ago.
+func (g *githubNames) mayAsk(id int64) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := g.clock.Now()
-	maps.DeleteFunc(g.asked, func(_ int64, a askedAccount) bool { return now.Sub(a.at) >= accountAskInterval })
-	if last, ok := g.asked[id]; ok {
-		return last, true
+	maps.DeleteFunc(g.asked, func(_ int64, at time.Time) bool { return now.Sub(at) >= accountAskInterval })
+	if _, ok := g.asked[id]; ok {
+		return false
 	}
-	g.asked[id] = askedAccount{at: now}
-	return askedAccount{}, false
-}
-
-// answered records the login that GitHub gave for the account id, empty when
-// it gave none.
-func (g *githubNames) answered(id int64, login string) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if a, ok := g.asked[id]; ok {
-		a.login = login
-		g.asked[id] = a
-	}
+	g.asked[id] = now
+	return true
 }
 
 func (g *githubNames) get(ctx context.Context, path string, out any) error {

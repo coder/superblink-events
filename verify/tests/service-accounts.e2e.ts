@@ -215,7 +215,7 @@ describe('service accounts', () => {
       const naming = (login: string) =>
         JSON.stringify({ ref: 'refs/heads/main', repository: { id: repoId, full_name: `${login}/tap`, owner: { id: ownerId, login } } });
       const deliver = async (body: string) => expect((await started.deliver({ event: 'push', delivery: newDeliveryId(), body })).status).toBe(202);
-      const login = () => started.sql(`select login from faucet_owners where owner_id = ${ownerId}`);
+      const login = () => started.sql(`select login from faucet_owners where owner_id = ${ownerId} and quarantined_at is null`);
 
       const kept = naming(old);
       await deliver(kept);
@@ -224,7 +224,8 @@ describe('service accounts', () => {
       await deliver(naming(renamed));
       expect(await login(), 'GitHub gave the account its new login').toBe(renamed);
       await deliver(kept);
-      expect(await login(), 'the kept delivery does not give the old login back').toBe(renamed);
+      expect(await login(), 'within the minute faucet asks no more, so the account holds no login').toBe('');
+      expect(await started.sql(`select count(*) from faucet_owners where lower(login) = '${old}' and quarantined_at is null`)).toBe('0');
       expect(await hooks.accountAsks(ownerId), 'faucet asked GitHub once, with no token').toEqual(['none']);
     });
   });

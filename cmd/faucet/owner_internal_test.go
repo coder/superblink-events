@@ -334,14 +334,16 @@ func TestAnOrgGrantFollowsItsAccountAndNoOtherHolderOfItsLogin(t *testing.T) {
 	repos, _ = waitFor(ctx, t, taker, map[string]any{"owner": "coder", "cursor": "v2.0"})
 	require.Equal(t, []int64{takeover.id}, repos, "a grant made now names the account that holds the login now")
 
+	// The hook admin sends the first delivery again by hand within the
+	// minute after faucet asked GitHub, so faucet asks no more and trusts
+	// neither account with the login until a later delivery gets an answer.
 	srv.deliverRunOf(t, "existing-1", coderExisting)
-	held, err := srv.store.OwnerByLogin(ctx, "coder")
-	require.NoError(t, err)
-	require.Equal(t, faucet.Owner{ID: 99, Login: "coder"}, held, "the delivery sent again by hand gives the renamed account no old login back")
-	repos, _ = waitFor(ctx, t, taker, map[string]any{"owner": "coder", "cursor": "v2.0"})
-	require.Equal(t, []int64{takeover.id}, repos, "the grant made later still names the account that holds the login")
-	require.Contains(t, waitError(ctx, t, taker, map[string]any{"repo": "coder/existing"}), "faucet has received no webhook delivery from coder/existing yet")
-	require.Contains(t, waitError(ctx, t, watcher, map[string]any{"owner": "coder"}), "the grant org:coder names an account that holds another login now")
+	_, err = srv.store.OwnerByLogin(ctx, "coder")
+	require.ErrorIs(t, err, faucet.ErrUnknownOwner, "the delivery sent again by hand gives the renamed account no old login back")
+	require.Contains(t, waitError(ctx, t, taker, map[string]any{"owner": "coder"}), "the grant org:coder names an account that holds another login now")
+	require.Contains(t, waitError(ctx, t, taker, map[string]any{"repo": "coder/existing"}), "no grant of this service names coder/existing")
+	require.Contains(t, waitError(ctx, t, watcher, map[string]any{"owner": "coder-legacy"}), "no grant of this service names the owner coder-legacy")
+	require.Contains(t, waitError(ctx, t, watcher, map[string]any{"repo": "coder-legacy/existing"}), "no grant of this service names coder-legacy/existing")
 }
 
 // An organization that gave up a login and the one that took it never mix:

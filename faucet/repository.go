@@ -203,8 +203,7 @@ func renamesRepository(eventName, action string) bool {
 // account and writes the login that GitHub gives it (Store.ConfirmOwner).
 // When GitHub does not answer, neither login resolves until a later delivery
 // of the account gets an answer. Faucet asks about one account at most once a
-// minute, and within that minute takes GitHub's last answer only when it is
-// the login that the store holds.
+// minute, and a delivery within that minute gets no answer.
 func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Owner, asks *deliveryAsks) {
 	held, err := s.store.OwnerByID(ctx, owner.ID)
 	switch {
@@ -224,11 +223,7 @@ func (s *Service) recordOwner(ctx context.Context, logger slog.Logger, owner Own
 	}
 	err = s.store.ConfirmOwner(ctx, owner, func() (Owner, error) {
 		current, err := asks.account(owner.ID)
-		switch {
-		case err == nil:
-		case xerrors.Is(err, errAskedRecently) && current.Login != "" && current.Login == held.Login:
-			return current, nil
-		default:
+		if err != nil {
 			logger.Warn(ctx, "GitHub did not give the account a login, so it and the account that holds the delivered login hold none until GitHub gives one",
 				slog.F("owner_id", owner.ID), slog.Error(err))
 		}
