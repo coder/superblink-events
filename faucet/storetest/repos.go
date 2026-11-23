@@ -25,7 +25,7 @@ var repositorySubtests = []subtest{
 	{"ConfirmOwnerTakesGitHubsLoginOrQuarantines", confirmOwnerTakesGitHubsLoginOrQuarantines},
 	{"LookupsOfOneAccountAskGitHubInTurn", lookupsOfOneAccountAskGitHubInTurn},
 	{"ConfirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin", confirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin},
-	{"AnAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged", anAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged},
+	{"AnAnswerThatGivesTheOldNameQuarantinesAndJudgesTheBody", anAnswerThatGivesTheOldNameQuarantinesAndJudgesTheBody},
 	{"ALookupThatWaitsTooLongForTheLockChangesNothing", aLookupThatWaitsTooLongForTheLockChangesNothing},
 	{"KeptRenamesThatChainGiveNoNameBack", keptRenamesThatChainGiveNoNameBack},
 	{"RenameRepositoryJudgesEachBodyOnce", renameRepositoryJudgesEachBodyOnce},
@@ -358,17 +358,18 @@ func confirmOwnerAsksNothingOfAnAccountThatHoldsTheLogin(t *testing.T, s faucet.
 
 // GitHub can answer with the name that a rename moved the repository from,
 // either lagging behind the rename or because GitHub undid a rename whose
-// body someone kept. The store binds neither name and leaves the body
-// unjudged, so that GitHub's next delivery of it asks again.
-func anAnswerThatGivesTheOldNameQuarantinesAndLeavesTheBodyUnjudged(t *testing.T, s faucet.Store) {
+// body someone kept. The store binds neither name and judges the body, so
+// that the body, sent again, asks GitHub nothing and binds nothing.
+func anAnswerThatGivesTheOldNameQuarantinesAndJudgesTheBody(t *testing.T, s faucet.Store) {
 	recordDelivered(t, s, repositoryNamed(1, "coder/r"), repositoryTime)
 	rename := renameOf(repositoryNamed(1, "coder/s"), "coder/r", repositoryTime)
 	require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, rename, repositoryTime.Add(time.Minute), repositoryNamed(1, "coder/r")))
 	requireUnknownName(t, s, "coder/r")
 	requireUnknownName(t, s, "coder/s")
 
-	require.Equal(t, faucet.RenameConfirmed, renameAnswered(t, s, rename, repositoryTime.Add(2*time.Minute), repositoryNamed(1, "coder/s")))
-	requireRepositoryNamed(t, s, "coder/s", repositoryNamed(1, "coder/s"))
+	require.Equal(t, faucet.RenameSeenBefore, renameAnswered(t, s, rename, repositoryTime.Add(2*time.Minute), repositoryNamed(1, "coder/s")))
+	requireUnknownName(t, s, "coder/r")
+	requireUnknownName(t, s, "coder/s")
 
 	unseen := renameOf(repositoryNamed(2, "coder/b"), "coder/a", repositoryTime)
 	require.Equal(t, faucet.RenameQuarantined, renameAnswered(t, s, unseen, repositoryTime.Add(3*time.Minute), repositoryNamed(2, "coder/a")))

@@ -178,8 +178,9 @@ func mustStatus(status int, _ time.Duration) int { return status }
 
 // GitHub's answer can lag a rename. An answer that still gives the name
 // that the rename moved the repository from cannot be told from a kept
-// rename that GitHub undid since, so faucet binds neither name and keeps
-// the body unjudged: GitHub's next delivery of it asks again.
+// rename that GitHub undid since, so faucet binds neither name and judges
+// the body: sent again, under any delivery GUID, it asks GitHub nothing and
+// binds nothing, even while GitHub refuses to answer.
 func TestAnAnswerFromGitHubThatGivesTheOldNameBindsNeither(t *testing.T) {
 	t.Parallel()
 	github := newNamesAPI(t)
@@ -194,9 +195,12 @@ func TestAnAnswerFromGitHubThatGivesTheOldNameBindsNeither(t *testing.T) {
 	require.Zero(t, srv.boundTo("coder/r"), "the old name reads nothing")
 	require.Zero(t, srv.boundTo("coder/s"))
 
-	github.repo(faucet.Repository{ID: 5, OwnerID: 7, OwnerLogin: "coder", FullName: "coder/s"})
-	require.Less(t, mustStatus(srv.timedPost(t, "repository", "rename-1", rename)), 300)
-	require.EqualValues(t, 5, srv.boundTo("coder/s"), "GitHub's next delivery of the body asks again")
+	asked := github.calls.Load()
+	for i := range 10 {
+		require.Less(t, mustStatus(srv.timedPost(t, "repository", fmt.Sprintf("replay-%d", i), rename)), 300)
+	}
+	require.Equal(t, asked, github.calls.Load(), "a body sent again asks GitHub nothing")
+	require.Zero(t, srv.boundTo("coder/s"), "a body sent again binds nothing")
 	require.Zero(t, srv.boundTo("coder/r"))
 }
 
