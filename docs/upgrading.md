@@ -4,7 +4,7 @@ The server applies every schema change at start (on Vercel, in production only, 
 
 ## To names that GitHub confirms
 
-This came in [#PR](https://github.com/coder/faucet/pull/PR). It changes how a host that records repositories (with `FAUCET_PUBLIC_URL`) moves the names that a `repo:` grant resolves through (see [security.md](security.md#repository-names)). It needs no migration.
+This came in [#93](https://github.com/coder/faucet/pull/93). It changes how a host that records repositories (with `FAUCET_PUBLIC_URL`) moves the names that a `repo:` grant resolves through (see [security.md](security.md#repository-names)). It needs no migration.
 
 - **Faucet asks GitHub before a delivery changes a name that it holds**, at `FAUCET_GITHUB_API_URL`, with no token: `GET /user/{id}` before it moves an account's login, and `GET /repositories/{id}` for each rename or transfer that it has not judged. The host must reach that URL. GitHub allows 60 such requests an hour for each IP address. A GitHub Enterprise Server that answers no request without a token makes faucet keep every login and judge every rename as it does a private repository's.
 - **A login moves only to the one that GitHub gives the account.** A delivery sent again, by faucet's redelivery, by a hook admin, or by someone who kept its body, gives no account an old login back. When GitHub does not answer, the login stays, and a later delivery of the account moves it.
