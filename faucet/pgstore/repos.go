@@ -69,7 +69,7 @@ func renameLocked(ctx context.Context, q *database.Queries, rename faucet.Reposi
 	current, err := ask()
 	answered := err == nil && current.ID == rename.Repo.ID && current.Validate() == nil
 	if answered && strings.EqualFold(current.FullName, rename.From) && !strings.EqualFold(current.FullName, rename.Repo.FullName) {
-		return quarantineUnjudged(ctx, q, rename, current, seenAt)
+		return quarantineAnswered(ctx, q, current, seenAt)
 	}
 	if answered {
 		if err := recordOwner(ctx, q, faucet.Owner{ID: current.OwnerID, Login: current.OwnerLogin}); err != nil {
@@ -111,12 +111,11 @@ func renameLocked(ctx context.Context, q *database.Queries, rename faucet.Reposi
 	return outcome, nil
 }
 
-// quarantineUnjudged quarantines the repository of a rename whose body it
-// leaves unjudged, inserting a row of current when the store holds none.
-func quarantineUnjudged(ctx context.Context, q *database.Queries, rename faucet.RepositoryRename, current faucet.Repository, seenAt time.Time) (faucet.RenameOutcome, error) {
-	if err := q.ForgetRepositoryRename(ctx, rename.Body[:]); err != nil {
-		return 0, xerrors.Errorf("forget the body of the rename: %w", err)
-	}
+// quarantineAnswered quarantines the repository of a rename that GitHub
+// answered with the rename's from name, inserting a row of current when the
+// store holds none. The body stays judged, so that sent again it asks GitHub
+// nothing and can never fall back to the held-name rules.
+func quarantineAnswered(ctx context.Context, q *database.Queries, current faucet.Repository, seenAt time.Time) (faucet.RenameOutcome, error) {
 	if err := q.RecordRepository(ctx, database.RecordRepositoryParams{
 		RepoID: current.ID, OwnerID: current.OwnerID, OwnerLogin: current.OwnerLogin, FullName: current.FullName, SeenAt: seenAt,
 	}); err != nil {

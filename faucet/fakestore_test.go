@@ -96,7 +96,6 @@ func (s *fakeStore) RenameRepository(_ context.Context, rename faucet.Repository
 	answered := err == nil && current.ID == rename.Repo.ID && current.Validate() == nil
 	switch {
 	case answered && strings.EqualFold(current.FullName, rename.From) && !strings.EqualFold(current.FullName, rename.Repo.FullName):
-		delete(s.renameBodies, rename.Body)
 		if i < 0 {
 			s.repos = append(s.repos, fakeRepo{repo: current, seenAt: seenAt})
 			i = len(s.repos) - 1

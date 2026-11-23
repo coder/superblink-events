@@ -387,9 +387,10 @@ type Store interface {
 	// login as RecordOwner does, and lifts a quarantine (RenameConfirmed). An
 	// answer that gives rename.From and not the rename's own name can be
 	// GitHub lagging behind the rename or a kept rename that GitHub undid
-	// since, so it quarantines the row, inserting one when it holds none, and
-	// leaves the body unjudged (RenameQuarantined), so that GitHub's next
-	// delivery of it asks again. An error from Ask leaves the names to the
+	// since, so it quarantines the row, inserting one when it holds none
+	// (RenameQuarantined). The body stays judged: sent again it asks nothing,
+	// and only a later rename that GitHub answers, or the operator, lifts the
+	// quarantine. An error from Ask leaves the names to the
 	// rename:
 	// with no row of rename.Repo.ID, it inserts one (Renamed). When the row's
 	// full name is rename.From, ignoring case, either as the row holds it or
