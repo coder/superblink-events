@@ -53,6 +53,10 @@ type loginConfig struct {
 	rawEvents []string
 	// accounts are the logins that GitHub gives accounts by ID now.
 	accounts map[int64]string
+	// githubAPI replaces the API that newGitHubNames serves for accounts.
+	githubAPI string
+	// maxOpenConns caps the database pool, as main does. Zero leaves it open.
+	maxOpenConns int
 }
 
 // newGitHubNames serves the GitHub API that faucet asks, with no token, for
@@ -92,8 +96,15 @@ func newLoginServer(t *testing.T, configure ...func(*loginConfig)) *loginServer 
 		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
 	}
 	db := newScratchDatabase(t, adminURL)
+	if cfg.maxOpenConns > 0 {
+		db.SetMaxOpenConns(cfg.maxOpenConns)
+	}
 	require.NoError(t, pgstore.Migrate(context.Background(), db))
 	store := pgstore.New(db)
+	githubAPI := cfg.githubAPI
+	if githubAPI == "" {
+		githubAPI = newGitHubNames(t, cfg.accounts)
+	}
 
 	srv := httptest.NewUnstartedServer(nil)
 	publicURL, err := parseOrigin("http://" + srv.Listener.Addr().String())
@@ -108,7 +119,7 @@ func newLoginServer(t *testing.T, configure ...func(*loginConfig)) *loginServer 
 	tokens, login, checks, err := newLogin(publicURL, nil, logins, nil, clock, logger)
 	require.NoError(t, err)
 	svc, _, err := newServices(config{
-		secret: testSecret, publicURL: publicURL, webhook: cfg.webhook, rawEvents: cfg.rawEvents, githubAPI: newGitHubNames(t, cfg.accounts),
+		secret: testSecret, publicURL: publicURL, webhook: cfg.webhook, rawEvents: cfg.rawEvents, githubAPI: githubAPI,
 	}, store, checks, clock, logger)
 	require.NoError(t, err)
 	cron := cronRoutes{secret: []byte(loginCronSecret), svc: svc, retention: 24 * time.Hour, login: login, clock: clock, logger: logger}
