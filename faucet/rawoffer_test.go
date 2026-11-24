@@ -52,7 +52,7 @@ func TestNewRefusesARawEventThatNoServiceOffers(t *testing.T) {
 		require.ErrorContains(t, faucet.CheckRawEvents([]string{event}), event)
 	}
 	for _, event := range []string{"pull_request", "github.push", "pushes", ""} {
-		require.ErrorContains(t, newWith(store, event), "not a GitHub event that faucet can offer raw", "%q", event)
+		require.ErrorContains(t, newWith(store, event), "not a GitHub event that Superblink Events can offer raw", "%q", event)
 	}
 	require.ErrorContains(t, newWith(nil, "push"), "RawStore")
 

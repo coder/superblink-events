@@ -71,7 +71,7 @@ func TestAWantedDeliveryRecoversWhenFaucetAnswersItsRedeliveryWith200(t *testing
 
 	env.advance(cronEvery)
 	second := env.run()
-	require.Equal(t, 1, second.Recovered, "faucet stored the copy and answered 200")
+	require.Equal(t, 1, second.Recovered, "Superblink Events stored the copy and answered 200")
 	require.Zero(t, second.Pending)
 	require.Zero(t, second.Asked, "the second ask was due, and a recovered delivery needs none")
 	require.Len(t, env.gh.askedTimes("pushed"), 1)
@@ -98,7 +98,7 @@ func TestALapsedInterestEndsItsPendingDeliveryAsRecoveredOnA2xxAttempt(t *testin
 	require.False(t, wants("push", "", 42))
 
 	second := env.run()
-	require.Equal(t, 1, second.Recovered, "faucet answered the redelivery 202, so the delivery has reached faucet")
+	require.Equal(t, 1, second.Recovered, "Superblink Events answered the redelivery 202, so the delivery has reached Superblink Events")
 	require.Zero(t, second.Pending)
 	require.Zero(t, second.Asked, "the second ask was due, and a recovered delivery needs none")
 	require.Len(t, env.gh.askedTimes("pushed"), 1)
@@ -139,7 +139,7 @@ func TestAWantsThatFailsTracksEveryDeliveryThatFaucetMayWant(t *testing.T) {
 				asked = 3
 			}
 			require.Equal(t, asked, res.Asked)
-			lost := env.logged("the raw interests could not be read, this run tracks every delivery that faucet may store raw")
+			lost := env.logged("the raw interests could not be read, this run tracks every delivery that Superblink Events may store raw")
 			require.Len(t, lost, 1)
 			require.Contains(t, lost[0]["error"], outage.Error())
 		})

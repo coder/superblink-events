@@ -105,7 +105,7 @@ func (t Target) Covers(repoID, ownerID int64) bool {
 type targetArguments struct {
 	Repo  string   `json:"repo,omitempty" jsonschema:"the repository, written owner/name"`
 	Owner string   `json:"owner,omitempty" jsonschema:"every repository of this owner, a GitHub user or organization login; for service clients only"`
-	All   *bool    `json:"all,omitempty" jsonschema:"true for every repository that faucet receives events from; for service clients only"`
+	All   *bool    `json:"all,omitempty" jsonschema:"true for every repository that Superblink Events receives events from; for service clients only"`
 	Repos []string `json:"repos,omitempty" jsonschema:"with owner or all, only the events of these repositories, each written owner/name"`
 }
 

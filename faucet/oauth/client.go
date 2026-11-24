@@ -252,11 +252,11 @@ func BindGrants(ctx context.Context, owners Repositories, grants []string) ([]st
 		o, err := owners.OwnerByLogin(ctx, login)
 		switch {
 		case xerrors.Is(err, faucet.ErrUnknownOwner):
-			return nil, xerrors.Errorf("faucet has received no webhook delivery from %s or a repository of it, so it cannot tell which account %s names; grant it once GitHub has sent one: %w", login, g, err)
+			return nil, xerrors.Errorf("Superblink Events has received no webhook delivery from %s or a repository of it, so it cannot tell which account %s names; grant it once GitHub has sent one: %w", login, g, err)
 		case err != nil:
 			return nil, xerrors.Errorf("look up the owner of %s: %w", g, err)
 		case hasID && o.ID != named.accountID:
-			return nil, xerrors.Errorf("%s names account %d, and faucet's latest delivery gives %s to account %d", g, named.accountID, login, o.ID)
+			return nil, xerrors.Errorf("%s names account %d, and Superblink Events' latest delivery gives %s to account %d", g, named.accountID, login, o.ID)
 		}
 		bound = append(bound, orgGrantPrefix+o.Login+accountSeparator+strconv.FormatInt(o.ID, 10))
 	}

@@ -112,9 +112,9 @@ func CheckRawEvents(events []string) error {
 	for _, event := range events {
 		switch {
 		case slices.Contains(refusedRawEvents, event):
-			return xerrors.Errorf("%s is refused: GitHub shows its payload only to people with more than read access to a repository, and faucet checks only read access", event)
+			return xerrors.Errorf("%s is refused: GitHub shows its payload only to people with more than read access to a repository, and Superblink Events checks only read access", event)
 		case !slices.ContainsFunc(rawEvents, func(e rawEvent) bool { return e.event == event }):
-			return xerrors.Errorf("%q is not a GitHub event that faucet can offer raw", event)
+			return xerrors.Errorf("%q is not a GitHub event that Superblink Events can offer raw", event)
 		}
 	}
 	return nil

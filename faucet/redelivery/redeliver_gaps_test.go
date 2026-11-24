@@ -171,7 +171,7 @@ func TestAnAttemptThatGotNoAnswerOrARedirectIsAFailureAndOnlyA2xxIsNot(t *testin
 			res := env.run()
 
 			require.Equal(t, failure, res.Tracked == 1, "status %d", status)
-			require.Equal(t, failure, env.stored("g1"), "a failure is asked for until faucet stores it")
+			require.Equal(t, failure, env.stored("g1"), "a failure is asked for until Superblink Events stores it")
 		})
 	}
 }
@@ -382,7 +382,7 @@ func TestAnExpiredFailureIsInsideTheGapWhenFaucetsClockLagsGitHubs(t *testing.T)
 			env.advance(8 * time.Hour)
 			requireListed(t, env, f)
 			env.advance(redelivery.GitHubDeliveryRetention)
-			require.True(t, f.at.After(env.clock.Now().Add(-redelivery.GitHubDeliveryRetention)), "faucet's clock says that GitHub still keeps F")
+			require.True(t, f.at.After(env.clock.Now().Add(-redelivery.GitHubDeliveryRetention)), "Superblink Events' clock says that GitHub still keeps F")
 			env.run()
 
 			requireNoSilentLoss(t, env, []ghAttempt{f})
@@ -404,7 +404,7 @@ func TestTheFirstRunsGapStartsBelowGitHubsListWhenFaucetsClockRunsAhead(t *testi
 			f := env.gh.record("F", t0.Add(-redelivery.GitHubDeliveryRetention+stillListedFor), 503)
 			env.gh.record("A", t0.Add(-time.Minute), http200)
 			requireListed(t, env, f)
-			require.False(t, f.at.After(env.clock.Now().Add(-redelivery.GitHubDeliveryRetention)), "faucet's clock says that the 72 hours of F are over")
+			require.False(t, f.at.After(env.clock.Now().Add(-redelivery.GitHubDeliveryRetention)), "Superblink Events' clock says that the 72 hours of F are over")
 
 			env.run()
 

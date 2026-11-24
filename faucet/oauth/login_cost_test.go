@@ -54,12 +54,12 @@ func TestAClientIDOnFaucetsOwnHostIsRefusedWithoutAFetch(t *testing.T) {
 		page := authorize(clientID)
 		require.Zero(t, documents.lookups.Load(), "%s is not fetched", clientID)
 		require.Equal(t, http.StatusBadRequest, page.Code, clientID)
-		require.Contains(t, page.Body.String(), "client_id must not be on faucet&#39;s own host", clientID)
+		require.Contains(t, page.Body.String(), "client_id must not be on Superblink Events&#39; own host", clientID)
 	}
 
 	page := authorize("https://faucet.example.com:8443/client.json")
 	require.EqualValues(t, 1, documents.lookups.Load(), "another port is another host")
-	require.Contains(t, page.Body.String(), "faucet could not fetch the client&#39;s document")
+	require.Contains(t, page.Body.String(), "Superblink Events could not fetch the client&#39;s document")
 }
 
 // Showing the consent page stores nothing: the login waits in the page's

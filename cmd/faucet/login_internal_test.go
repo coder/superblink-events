@@ -343,7 +343,7 @@ func TestAServiceIsCheckedByItsGrantsAndTheReposThatDeliveriesNamed(t *testing.T
 	res, err := call(ctx, session, "octo-org/octo-repo", map[string]any{"cursor": "v2.0", "timeout_s": 1})
 	require.NoError(t, err)
 	require.True(t, res.IsError, "no delivery has named the repository yet")
-	require.Contains(t, toolText(t, res), "faucet has received no webhook delivery from octo-org/octo-repo yet")
+	require.Contains(t, toolText(t, res), "Superblink Events has received no webhook delivery from octo-org/octo-repo yet")
 
 	srv.deliver(t, "d-1")
 	res, err = call(ctx, session, "Octo-Org/Octo-Repo", map[string]any{"cursor": "v2.0", "timeout_s": 1})
@@ -633,7 +633,7 @@ func TestUpdatingAClientReachesItsTokenOnTheNextRequest(t *testing.T) {
 	require.NoError(t, poll(session))
 	require.NoError(t, subscribeTo(ctx, session, "octo-org/octo-repo"))
 
-	require.Contains(t, update("-scope", "events:read"), "faucet deleted its 1 subscriptions", "a client that cannot subscribe keeps no subscription")
+	require.Contains(t, update("-scope", "events:read"), "Superblink Events deleted its 1 subscriptions", "a client that cannot subscribe keeps no subscription")
 	require.NoError(t, poll(session), "the token keeps the scope that the client holds")
 	require.Error(t, subscribeTo(ctx, session, "octo-org/octo-repo"), "the token drops the scope that the client lost")
 	narrow := connectSubscriber(ctx, t, ts, srv.token(t, "ci-watcher", secret))

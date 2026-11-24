@@ -71,7 +71,7 @@ var issuerProfiles = map[string]issuerProfile{
 		issuer: vercelTeamIssuer,
 		pins: []requiredPin{
 			{claim: "owner_id", why: "Vercel signs the tokens of every team with the same keys, and a renamed team's slug can pass to another team, so only the team ID tells the teams apart"},
-			{claim: "project_id", why: "every project of the team can get a token for faucet"},
+			{claim: "project_id", why: "every project of the team can get a token for Superblink Events"},
 			{claim: "environment", value: "production", why: "a preview deployment runs any branch, and a development token sits on a laptop for 12 hours"},
 		},
 	},
@@ -82,22 +82,22 @@ var issuerProfiles = map[string]issuerProfile{
 // unpinnableClaims are the claims that no rule may pin, and why.
 var unpinnableClaims = map[string]string{
 	"iss": "the rule's issuer is the token's iss",
-	"aud": "faucet takes a token whose aud is faucet alone, and Kubernetes sends aud as an array, which no pin matches",
-	"exp": "faucet checks it, and it is a number, which no pin matches",
-	"nbf": "faucet checks it, and it is a number, which no pin matches",
-	"iat": "faucet checks it, and it is a number, which no pin matches",
+	"aud": "Superblink Events takes a token whose aud is Superblink Events alone, and Kubernetes sends aud as an array, which no pin matches",
+	"exp": "Superblink Events checks it, and it is a number, which no pin matches",
+	"nbf": "Superblink Events checks it, and it is a number, which no pin matches",
+	"iat": "Superblink Events checks it, and it is a number, which no pin matches",
 	"jti": "it names one token, so the rule would match one token at most",
 }
 
 var otherIssuers = issuerProfile{
-	pins: []requiredPin{{claim: "sub", why: "every workload of the issuer can get a token for faucet, and sub names one of them"}},
+	pins: []requiredPin{{claim: "sub", why: "every workload of the issuer can get a token for Superblink Events, and sub names one of them"}},
 }
 
 const githubActionsPins = "no test has logged in with one, and a rule would have to pin repository_owner_id, repository_id, ref, event_name and job_workflow_ref, as ref alone also matches a pull_request_target or workflow_run run that a fork's pull request starts"
 
 func notYet(host, why string) func(string) error {
 	return func(string) error {
-		return xerrors.Errorf("faucet does not take tokens of %s yet; %s", host, why)
+		return xerrors.Errorf("Superblink Events does not take tokens of %s yet; %s", host, why)
 	}
 }
 
@@ -107,7 +107,7 @@ const vercelTeamIssuerPrefix = "https://oidc.vercel.com/"
 // https://oidc.vercel.com/<team>.
 func vercelTeamIssuer(issuer string) error {
 	if strings.TrimSuffix(issuer, "/")+"/" == vercelTeamIssuerPrefix {
-		return xerrors.Errorf("faucet never trusts %s, which every Vercel team shares: trust the team's issuer, %s<team>", issuer, vercelTeamIssuerPrefix)
+		return xerrors.Errorf("Superblink Events never trusts %s, which every Vercel team shares: trust the team's issuer, %s<team>", issuer, vercelTeamIssuerPrefix)
 	}
 	if team, ok := strings.CutPrefix(issuer, vercelTeamIssuerPrefix); !ok || strings.Contains(team, "/") {
 		return xerrors.Errorf("a Vercel issuer is %s<team>, as the team's tokens name it", vercelTeamIssuerPrefix)

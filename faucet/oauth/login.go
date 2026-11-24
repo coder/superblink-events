@@ -54,7 +54,7 @@ type refusal struct {
 func badAuthorization(reason string) *refusal {
 	return &refusal{status: http.StatusBadRequest, reason: reason, page: errorPage{
 		Title:   "This login cannot start",
-		Message: "The app that sent you here asked for a login that faucet does not accept. Go back to your agent and start the login again; if this page comes back, the app's developer must fix the request.",
+		Message: "The app that sent you here asked for a login that Superblink Events does not accept. Go back to your agent and start the login again; if this page comes back, the app's developer must fix the request.",
 		Detail:  reason,
 	}}
 }
@@ -64,7 +64,7 @@ func badAuthorization(reason string) *refusal {
 func forbiddenConsent(reason string) *refusal {
 	return &refusal{status: http.StatusForbidden, reason: reason, page: errorPage{
 		Title:   "Login stopped",
-		Message: "faucet cannot tell that this browser started this login, so the login stops here. Go back to your agent and start the login again.",
+		Message: "Superblink Events cannot tell that this browser started this login, so the login stops here. Go back to your agent and start the login again.",
 	}}
 }
 
@@ -73,7 +73,7 @@ func forbiddenConsent(reason string) *refusal {
 func unknownLogin(reason string) *refusal {
 	return &refusal{status: http.StatusBadRequest, reason: reason, page: errorPage{
 		Title:   "This login is over",
-		Message: "faucet has no open login for this page: it expired, it finished already, or it did not start here. Go back to your agent and start the login again.",
+		Message: "Superblink Events has no open login for this page: it expired, it finished already, or it did not start here. Go back to your agent and start the login again.",
 	}}
 }
 
@@ -91,21 +91,21 @@ func wrongBrowser(reason string) *refusal {
 func githubFailure(status int, err error) *refusal {
 	return &refusal{status: status, err: err, page: errorPage{
 		Title:   "GitHub did not finish the login",
-		Message: "faucet could not get your login from GitHub. Go back to your agent and start the login again.",
+		Message: "Superblink Events could not get your login from GitHub. Go back to your agent and start the login again.",
 	}}
 }
 
 func wrongMethod(method string) *refusal {
 	return &refusal{status: http.StatusMethodNotAllowed, reason: "method " + method, page: errorPage{
 		Title:   "This page takes a link",
-		Message: "faucet's login pages open from a link of your agent. Go back to your agent and start the login again.",
+		Message: "Superblink Events' login pages open from a link of your agent. Go back to your agent and start the login again.",
 	}}
 }
 
 func failure(err error) *refusal {
 	return &refusal{status: http.StatusInternalServerError, err: err, page: errorPage{
 		Title:   "Something went wrong",
-		Message: "faucet could not finish this step of the login. Go back to your agent and start the login again.",
+		Message: "Superblink Events could not finish this step of the login. Go back to your agent and start the login again.",
 	}}
 }
 
@@ -194,7 +194,7 @@ func (s *Server) readAuthorization(ctx context.Context, rawQuery string) (AuthRe
 		// consent page.
 		return AuthRequest{}, badAuthorization("the host of client_id must be ASCII: write an internationalized name in its xn-- form")
 	case hostKey(clientID) == hostKey(s.issuer):
-		return AuthRequest{}, badAuthorization("client_id must not be on faucet's own host: faucet does not fetch documents from itself")
+		return AuthRequest{}, badAuthorization("client_id must not be on Superblink Events' own host: Superblink Events does not fetch documents from itself")
 	}
 	doc, err := s.login.documents.fetch(ctx, clientID)
 	if err != nil {
@@ -220,7 +220,7 @@ func (s *Server) readAuthorization(ctx context.Context, rawQuery string) (AuthRe
 	case q.Get("code_challenge_method") != "S256":
 		reason = "code_challenge_method must be S256"
 	case !slices.Contains(s.resources, resource):
-		reason = "resource must be an endpoint of this faucet: " + strings.Join(s.resources, ", ")
+		reason = "resource must be an endpoint of this Superblink Events server: " + strings.Join(s.resources, ", ")
 	case len(state) > maxClientStateBytes:
 		reason = fmt.Sprintf("state must be at most %d bytes", maxClientStateBytes)
 	}
@@ -229,7 +229,7 @@ func (s *Server) readAuthorization(ctx context.Context, rawQuery string) (AuthRe
 	}
 	scopes, err := grantedScopes(q, faucet.AllScopes())
 	if err != nil {
-		return AuthRequest{}, badAuthorization("scope must name at least one scope of faucet, or be left out to ask for all of them")
+		return AuthRequest{}, badAuthorization("scope must name at least one scope of Superblink Events, or be left out to ask for all of them")
 	}
 	return AuthRequest{
 		ClientID: clientID, ClientName: doc.ClientName, RedirectURI: redirectURI, ClientState: state,
@@ -322,7 +322,7 @@ func (s *Server) checkConsent(r *http.Request, form url.Values) (string, error) 
 		return "", xerrors.New("the form names no well-formed request")
 	}
 	if origins := r.Header.Values("Origin"); len(origins) != 1 || origins[0] != s.issuer {
-		return "", xerrors.New("the Origin header is not faucet's issuer")
+		return "", xerrors.New("the Origin header is not Superblink Events' issuer")
 	}
 	cookie, err := r.Cookie(browserCookieName(id))
 	if err != nil || cookie.Value == "" {
@@ -430,8 +430,8 @@ func (s *Server) approve(ctx context.Context, request AuthRequest, state, github
 	switch {
 	case xerrors.Is(err, errTokensDoNotExpire):
 		return "", &refusal{status: http.StatusBadGateway, err: err, page: errorPage{
-			Title:   "faucet cannot keep this login",
-			Message: "faucet's GitHub App gives tokens that never expire, and faucet keeps none of those. Tell the person who runs faucet; a new login works once they change the App.",
+			Title:   "Superblink Events cannot keep this login",
+			Message: "Superblink Events' GitHub App gives tokens that never expire, and Superblink Events keeps none of those. Tell the person who runs Superblink Events; a new login works once they change the App.",
 		}}
 	case err != nil:
 		return "", githubFailure(http.StatusBadGateway, xerrors.Errorf("trade GitHub's code: %w", err))

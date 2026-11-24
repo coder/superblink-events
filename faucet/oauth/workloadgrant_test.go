@@ -151,7 +151,7 @@ func TestAWorkloadTokenLastsFromItsMint(t *testing.T) {
 }
 
 var waitForKeys = map[string]any{
-	"error": "temporarily_unavailable", "error_description": "faucet cannot get the key of the subject token from its issuer yet: try again after Retry-After seconds",
+	"error": "temporarily_unavailable", "error_description": "Superblink Events cannot get the key of the subject token from its issuer yet: try again after Retry-After seconds",
 }
 
 func TestATokenExchangeWaitsWhileTheKeysOfItsIssuerFail(t *testing.T) {
@@ -164,7 +164,7 @@ func TestATokenExchangeWaitsWhileTheKeysOfItsIssuerFail(t *testing.T) {
 	require.Equal(t, "60", reply.header.Get("Retry-After"))
 	require.Equal(t, waitForKeys, reply.body)
 	require.True(t, logged(h.logs.String(), "[warn]", "a workload's token waits for the keys of its issuer", "client_id=digest-bot",
-		"faucet could not fetch the keys of the subject token's issuer https://oidc.vercel.com/codercom: the key set: it must be served with status 200 and no redirect, not 404"), h.logs.String())
+		"Superblink Events could not fetch the keys of the subject token's issuer https://oidc.vercel.com/codercom: the key set: it must be served with status 200 and no redirect, not 404"), h.logs.String())
 
 	h.clock.Advance(15*time.Second + time.Millisecond)
 	reply = h.post("", exchange(h.vercelToken()))
@@ -210,8 +210,8 @@ func TestATokenExchangeCarriesNoSecretAndNoActor(t *testing.T) {
 		"no subject_token":               {"", exchange("", "subject_token", ""), "subject_token is required"},
 		"no subject_token_type":          {"", exchange(token, "subject_token_type", ""), "subject_token_type must be " + jwtTokenType},
 		"an access token as the subject": {"", exchange(token, "subject_token_type", accessTokenType), "subject_token_type must be " + jwtTokenType},
-		"an actor_token":                 {"", exchange(token, "actor_token", token, "actor_token_type", jwtTokenType), "faucet takes no actor_token"},
-		"an actor_token_type":            {"", exchange(token, "actor_token_type", jwtTokenType), "faucet takes no actor_token"},
+		"an actor_token":                 {"", exchange(token, "actor_token", token, "actor_token_type", jwtTokenType), "Superblink Events takes no actor_token"},
+		"an actor_token_type":            {"", exchange(token, "actor_token_type", jwtTokenType), "Superblink Events takes no actor_token"},
 		"a refresh token asked for":      {"", exchange(token, "requested_token_type", "urn:ietf:params:oauth:token-type:refresh_token"), "requested_token_type can only be " + accessTokenType},
 	} {
 		reply := h.post(c.authorization, c.form)
@@ -244,10 +244,10 @@ func TestATokenExchangeIsForTheClientsEndpoint(t *testing.T) {
 		extra      []string
 		code, want string
 	}{
-		"another audience":         {[]string{"audience", issuer + "/mcp"}, "invalid_target", "the tokens of this client are for " + resource},
-		"faucet as the audience":   {[]string{"audience", issuer}, "invalid_target", "the tokens of this client are for " + resource},
-		"another resource":         {[]string{"resource", issuer + "/mcp"}, "invalid_target", "the tokens of this client are for " + resource},
-		"a scope the client lacks": {[]string{"scope", "repo"}, "invalid_scope", "the client holds none of the scopes asked for"},
+		"another audience":                  {[]string{"audience", issuer + "/mcp"}, "invalid_target", "the tokens of this client are for " + resource},
+		"Superblink Events as the audience": {[]string{"audience", issuer}, "invalid_target", "the tokens of this client are for " + resource},
+		"another resource":                  {[]string{"resource", issuer + "/mcp"}, "invalid_target", "the tokens of this client are for " + resource},
+		"a scope the client lacks":          {[]string{"scope", "repo"}, "invalid_scope", "the client holds none of the scopes asked for"},
 	} {
 		reply := h.post("", exchange(token, c.extra...))
 		require.Equal(t, http.StatusBadRequest, reply.status, "%s: %s", name, reply.rawBody)
@@ -273,7 +273,7 @@ func TestATokenExchangeIsForTheClientsEndpoint(t *testing.T) {
 }
 
 var refusedExchange = map[string]any{
-	"error": "invalid_client", "error_description": "the client takes no such subject token: check client_id and the token, and faucet's log for the reason",
+	"error": "invalid_client", "error_description": "the client takes no such subject token: check client_id and the token, and Superblink Events' log for the reason",
 }
 
 func TestATokenExchangeNeedsALiveClientThatTrustsTheToken(t *testing.T) {

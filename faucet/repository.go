@@ -178,9 +178,9 @@ func (s *Service) renameRepository(ctx context.Context, logger slog.Logger, deli
 		switch {
 		case err == nil:
 		case xerrors.Is(err, errGitHubNotFound):
-			logger.Info(ctx, "GitHub names no such public repository, so faucet judges the rename by the name that it holds")
+			logger.Info(ctx, "GitHub names no such public repository, so Superblink Events judges the rename by the name that it holds")
 		default:
-			logger.Warn(ctx, "GitHub gave no names for the repository, so faucet judges the rename by the name that it holds", slog.Error(err))
+			logger.Warn(ctx, "GitHub gave no names for the repository, so Superblink Events judges the rename by the name that it holds", slog.Error(err))
 		}
 		return current, err
 	}})
@@ -188,7 +188,7 @@ func (s *Service) renameRepository(ctx context.Context, logger slog.Logger, deli
 		return xerrors.Errorf("rename the repository: %w", err)
 	}
 	if outcome == RenameQuarantined {
-		logger.Warn(ctx, "a rename or transfer of the repository never reached faucet, or an old one came again, so the repository resolves no name until GitHub names it",
+		logger.Warn(ctx, "a rename or transfer of the repository never reached Superblink Events, or an old one came again, so the repository resolves no name until GitHub names it",
 			slog.F("from", rename.From), slog.F("full_name", rename.Repo.FullName))
 	}
 	return nil

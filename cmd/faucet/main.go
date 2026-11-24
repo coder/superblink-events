@@ -164,7 +164,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 	case err != nil:
 		return config{}, err
 	case publicURL == nil:
-		return config{}, xerrors.Errorf("%s is required: it is faucet's public URL, such as https://faucet.example.com or http://localhost:8080, where every caller logs in", envPublicURL)
+		return config{}, xerrors.Errorf("%s is required: it is Superblink Events' public URL, such as https://superblink-events.example.com or http://localhost:8080, where every caller logs in", envPublicURL)
 	}
 	cfg.publicURL, cfg.publicURLDerived = publicURL, derived
 	if err := loadBrowserLoginConfig(getenv, &cfg); err != nil {

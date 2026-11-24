@@ -143,7 +143,7 @@ func TestACallbackInAnotherBrowserIsRefusedAndTheRightBrowserCanFinish(t *testin
 		loginRequireErrorPage(t, refused, http.StatusForbidden)
 		require.Empty(t, refused.header.Values("Set-Cookie"), name)
 	}
-	require.Zero(t, h.github.tradeCount(), "faucet traded no code for another browser")
+	require.Zero(t, h.github.tradeCount(), "Superblink Events traded no code for another browser")
 	require.Equal(t, oauth.AuthRequestPending, loginStoredRequest(t, h.store, consent.id).State)
 
 	h.loginRequireCode(t, b.get(back), client)
@@ -156,7 +156,7 @@ func TestAFailedTradeAtGitHubIsAnErrorPageAndLeavesTheLoginOpen(t *testing.T) {
 		// says is in the page.
 		says string
 	}{
-		"GitHub refuses the code": {answer: `{"error":"bad_verification_code"}`, says: "faucet could not get your login from GitHub"},
+		"GitHub refuses the code": {answer: `{"error":"bad_verification_code"}`, says: "Superblink Events could not get your login from GitHub"},
 		"the App's tokens never expire": {
 			answer: `{"access_token":"ghu_neverexpires","token_type":"bearer","scope":""}`, says: "tokens that never expire",
 		},

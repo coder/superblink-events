@@ -23,7 +23,7 @@ var subjectTokenTypes = []string{"urn:ietf:params:oauth:token-type:jwt", "urn:ie
 // challenge (RFC 6749 section 5.2).
 var errWorkloadRefused = &tokenError{
 	status: http.StatusBadRequest, code: "invalid_client",
-	description: "the client takes no such subject token: check client_id and the token, and faucet's log for the reason",
+	description: "the client takes no such subject token: check client_id and the token, and Superblink Events' log for the reason",
 }
 
 type clientRefusalError string
@@ -41,7 +41,7 @@ func (s *Server) tokenExchange(r *http.Request, form url.Values) (tokenResponse,
 	case !slices.Contains(subjectTokenTypes, form.Get("subject_token_type")):
 		return tokenResponse{}, badRequest("invalid_request", "subject_token_type must be "+subjectTokenTypes[0]+" or "+subjectTokenTypes[1])
 	case form.Has("actor_token") || form.Has("actor_token_type"):
-		return tokenResponse{}, badRequest("invalid_request", "faucet takes no actor_token: a workload acts as the client, for no other party")
+		return tokenResponse{}, badRequest("invalid_request", "Superblink Events takes no actor_token: a workload acts as the client, for no other party")
 	case form.Get("requested_token_type") != "" && form.Get("requested_token_type") != accessTokenType:
 		return tokenResponse{}, badRequest("invalid_request", "requested_token_type can only be "+accessTokenType)
 	}
@@ -97,7 +97,7 @@ func (s *Server) exchangeAnswer(ctx context.Context, clientID string, err error)
 		s.logger.Warn(ctx, "a workload's token waits for the keys of its issuer", slog.F("client_id", clientID), slog.Error(err))
 		return &tokenError{
 			status: http.StatusServiceUnavailable, code: "temporarily_unavailable", retryAfter: max(time.Second, keys.retryAt.Sub(s.clock.Now())),
-			description: "faucet cannot get the key of the subject token from its issuer yet: try again after Retry-After seconds",
+			description: "Superblink Events cannot get the key of the subject token from its issuer yet: try again after Retry-After seconds",
 		}
 	case xerrors.As(err, &refusal), xerrors.As(err, &token) && !token.signed:
 		answer = errWorkloadRefused

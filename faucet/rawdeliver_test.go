@@ -87,7 +87,7 @@ func TestDeliverDueSendsARawEventAsASignedWebhookWithThePayloadAsData(t *testing
 	body := g.body(t)
 	require.Equal(t, "github.push", body.Name)
 	require.Equal(t, g.messageID(), body.EventID)
-	require.True(t, body.Timestamp.Equal(receivedAt), "the time faucet received the event, got %s", body.Timestamp)
+	require.True(t, body.Timestamp.Equal(receivedAt), "the time Superblink Events received the event, got %s", body.Timestamp)
 	require.Equal(t, map[string]any{"ref": "refs/heads/a", "repository": map[string]any{"id": float64(repoID), "full_name": testRepo}}, body.Data)
 	require.Equal(t, fmt.Sprintf("r1.%d", first-1), body.Cursor, "every event at or below the cursor is delivered or given up")
 
@@ -303,7 +303,7 @@ func TestDeliverDueEndsARawSubscriptionWhoseArgumentsDoNotDecode(t *testing.T) {
 	res := d.deliverDue()
 	require.Equal(t, 2, res.GaveUp[faucet.GiveUpArgumentsUndecodable], "the delivery that was tried and the one that waited behind it")
 	require.Equal(t, 2, res.Delivered, "the other subscription gets its events")
-	require.Empty(t, d.rcv.requests("/hook"), "nothing is sent for arguments that faucet cannot read")
+	require.Empty(t, d.rcv.requests("/hook"), "nothing is sent for arguments that Superblink Events cannot read")
 	require.Len(t, d.rows(), 1, "the subscription is deleted, and the other stays")
 	require.True(t, d.logsContain("stored arguments do not decode"))
 }

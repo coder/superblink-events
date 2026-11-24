@@ -96,7 +96,7 @@ func TestPollOfARawNameReturnsWhatArrivedSinceTheLeaseOpened(t *testing.T) {
 		require.Equal(t, "github.push", ev.Name)
 		require.Equal(t, ref, ev.Data["ref"])
 		require.Equal(t, map[string]any{"id": float64(repoID), "full_name": testRepo}, ev.Data["repository"], "the data is the payload")
-		require.True(t, ev.Timestamp.Equal(h.clock.Now().Add(time.Duration(i-1)*time.Second)), "the time faucet received it, got %s", ev.Timestamp)
+		require.True(t, ev.Timestamp.Equal(h.clock.Now().Add(time.Duration(i-1)*time.Second)), "the time Superblink Events received it, got %s", ev.Timestamp)
 	}
 
 	again := h.pollRaw("github.push", repoArgs(), opened.Cursor)

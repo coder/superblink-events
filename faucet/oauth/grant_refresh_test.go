@@ -93,7 +93,7 @@ func TestALateReuseOfARefreshTokenEndsItsSessionWithoutAskingGitHub(t *testing.T
 	grantRequireRefused(t, h.post("", grantRefreshForm(first.refresh)), http.StatusBadRequest, "invalid_grant", "the token hours after its first use")
 	require.False(t, h.session("login-1").Live(), "the session ended")
 	refreshes, repoChecks := h.github.counts()
-	require.Zero(t, refreshes, "faucet asks GitHub for no new pair for a request that it refuses")
+	require.Zero(t, refreshes, "Superblink Events asks GitHub for no new pair for a request that it refuses")
 	require.Zero(t, repoChecks)
 	kept, err := h.store.Connection(context.Background(), id)
 	require.NoError(t, err)

@@ -272,7 +272,7 @@ func TestClientCredentialsRefusesAClientThatDoesNotAuthenticate(t *testing.T) {
 		reply := h.post(authorization, clientCredentials())
 		require.Equal(t, http.StatusUnauthorized, reply.status, name)
 		require.Equal(t, map[string]any{"error": "invalid_client", "error_description": "client authentication failed"}, reply.body, name)
-		require.Equal(t, `Basic realm="faucet"`, reply.header.Get("WWW-Authenticate"), name)
+		require.Equal(t, `Basic realm="Superblink Events"`, reply.header.Get("WWW-Authenticate"), name)
 		require.NotContains(t, reply.rawBody, h.secret, name)
 	}
 	require.Zero(t, h.store.tokenCount())

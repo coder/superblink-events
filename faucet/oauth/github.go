@@ -133,7 +133,7 @@ func (g GitHubApp) requestTokens(ctx context.Context, form url.Values) (githubTo
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "coder-faucet")
+	req.Header.Set("User-Agent", "coder-superblink-events")
 	client := http.DefaultClient
 	if g.Client != nil {
 		client = g.Client

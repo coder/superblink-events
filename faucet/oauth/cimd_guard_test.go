@@ -98,7 +98,7 @@ func TestNoOptionOfTheDocumentClientReachesAPrivateAddressOrFollowsARedirect(t *
 				}
 				page, logged := authorize(t, opts, "https://"+host+":"+strconv.Itoa(int(port))+"/internal.json")
 				require.Equal(t, http.StatusBadRequest, page.Code, host)
-				require.Contains(t, page.Body.String(), "faucet could not fetch the client&#39;s document", host)
+				require.Contains(t, page.Body.String(), "Superblink Events could not fetch the client&#39;s document", host)
 				require.Contains(t, logged, faucet.ErrDestinationRefused.Error(), host)
 			}
 			page, _ := authorize(t, opts, docs.URL+"/moved.json")

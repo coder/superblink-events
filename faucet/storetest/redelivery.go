@@ -206,7 +206,7 @@ func settleRecoversAStoredDeliveryAndClaimSkipsIt(t *testing.T, s RedeliveryStor
 
 	picked, ok := claim(t, s, t0.Add(time.Minute))
 	require.True(t, ok)
-	require.Equal(t, "guid-b", picked.GUID, "a delivery that faucet has stored needs no ask, even before a settle")
+	require.Equal(t, "guid-b", picked.GUID, "a delivery that Superblink Events has stored needs no ask, even before a settle")
 	_, ok = claim(t, s, t0.Add(time.Minute))
 	require.False(t, ok)
 

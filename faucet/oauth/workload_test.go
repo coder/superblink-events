@@ -67,7 +67,7 @@ func TestAVercelRuleMustPinTheTeamTheProjectAndProduction(t *testing.T) {
 			map[string]string{"owner": "codercom", "project": "digest-bot", "sub": "owner:codercom:project:digest-bot:environment:production", "environment": "production"},
 			"must pin owner_id",
 		},
-		"no project ID":  {without("project_id"), "must pin project_id: every project of the team can get a token for faucet"},
+		"no project ID":  {without("project_id"), "must pin project_id: every project of the team can get a token for Superblink Events"},
 		"no environment": {without("environment"), "must pin environment=production: a preview deployment runs any branch"},
 		"preview":        {with("environment", "preview"), "must pin environment=production"},
 		"development":    {with("environment", "development"), "must pin environment=production"},
@@ -83,7 +83,7 @@ func TestFaucetTrustsOnlyTheIssuerOfOneVercelTeam(t *testing.T) {
 	t.Parallel()
 	for _, issuer := range []string{"https://oidc.vercel.com", "https://oidc.vercel.com/"} {
 		err := oauth.ValidateTrustRule(oauth.TrustRule{Issuer: issuer, Claims: trustVercelPins()})
-		require.ErrorContains(t, err, "faucet never trusts "+issuer+", which every Vercel team shares: trust the team's issuer, https://oidc.vercel.com/<team>")
+		require.ErrorContains(t, err, "Superblink Events never trusts "+issuer+", which every Vercel team shares: trust the team's issuer, https://oidc.vercel.com/<team>")
 	}
 	for _, issuer := range []string{
 		"https://oidc.vercel.com/codercom/", "https://oidc.vercel.com/codercom/x", "https://oidc.vercel.com:443/codercom", "https://OIDC.vercel.com/codercom",
@@ -110,7 +110,7 @@ func TestFaucetRefusesARuleForGitHubActionsOrGitLab(t *testing.T) {
 	} {
 		for _, claims := range []map[string]string{c.pins, {"sub": "repo:octo-org/octo-repo:ref:refs/heads/main"}} {
 			err := oauth.ValidateTrustRule(oauth.TrustRule{Issuer: issuer, Claims: claims})
-			require.ErrorContains(t, err, "faucet does not take tokens of "+c.host+" yet; no test has logged in with one, and a rule would have to pin ", "%s %v", issuer, claims)
+			require.ErrorContains(t, err, "Superblink Events does not take tokens of "+c.host+" yet; no test has logged in with one, and a rule would have to pin ", "%s %v", issuer, claims)
 		}
 	}
 }
@@ -120,7 +120,7 @@ func TestARuleOfAnyOtherIssuerMustPinSub(t *testing.T) {
 	const issuer = "https://container.googleapis.com/v1/projects/p/locations/l/clusters/c"
 	require.NoError(t, oauth.ValidateTrustRule(oauth.TrustRule{Issuer: issuer, Claims: map[string]string{"sub": "system:serviceaccount:ns:sa"}}))
 	err := oauth.ValidateTrustRule(oauth.TrustRule{Issuer: issuer, Claims: map[string]string{"kubernetes.io/namespace": "ns"}})
-	require.ErrorContains(t, err, "a trust rule for "+issuer+" must pin sub: every workload of the issuer can get a token for faucet")
+	require.ErrorContains(t, err, "a trust rule for "+issuer+" must pin sub: every workload of the issuer can get a token for Superblink Events")
 }
 
 func TestARuleNamesAnHTTPSIssuerAndPinsAClaimToAValue(t *testing.T) {
@@ -267,7 +267,7 @@ func TestCanonicalTrustRuleKeepsTheKeysOfAPastedKeySetCompact(t *testing.T) {
 	}
 	canonical, err := oauth.CanonicalTrustRule(rule)
 	require.NoError(t, err)
-	require.Equal(t, `{"keys":[`+string(public)+`,{"kty":"XYZ","kid":"b"}]}`, string(canonical.JWKS), "a key that faucet cannot read stays, as ValidateTrustRule read it")
+	require.Equal(t, `{"keys":[`+string(public)+`,{"kty":"XYZ","kid":"b"}]}`, string(canonical.JWKS), "a key that Superblink Events cannot read stays, as ValidateTrustRule read it")
 	require.Equal(t, rule.Issuer, canonical.Issuer)
 	require.Equal(t, rule.Claims, canonical.Claims)
 	require.NoError(t, oauth.ValidateTrustRule(canonical))

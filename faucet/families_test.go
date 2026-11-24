@@ -444,7 +444,7 @@ func requireSamplesAreOfFamily(t *testing.T, family faucet.EventName) {
 		action, ok := strings.CutPrefix(ev.Type, typePrefix[family.Name])
 		require.True(t, ok && slices.Contains(family.Actions, action), "%s stores %s as %s, which is no type of %s", sample, family.GitHubEvent, ev.Type, family.Name)
 	}
-	require.NotZero(t, stored, "testdata holds no sample of %s that faucet stores", family.GitHubEvent)
+	require.NotZero(t, stored, "testdata holds no sample of %s that Superblink Events stores", family.GitHubEvent)
 }
 
 // sampleEvent returns the GitHub event of a sample in testdata, which is

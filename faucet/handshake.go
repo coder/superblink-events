@@ -33,7 +33,7 @@ const (
 	maxHandshakeAnswer   = 1024
 	handshakeNonceBytes  = 32
 	handshakeIDBytes     = 16
-	handshakeUserAgent   = "faucet-webhook-verification"
+	handshakeUserAgent   = "superblink-events-webhook-verification"
 	subscriptionIDHeader = "X-MCP-Subscription-Id"
 )
 

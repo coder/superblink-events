@@ -78,7 +78,7 @@ func TestSignWebhookSignaturesFailForAnythingElse(t *testing.T) {
 
 	old, err := faucet.SignWebhook(secret, "msg_1", now.Add(-10*time.Minute), body)
 	require.NoError(t, err)
-	require.Error(t, verifier.Verify(body, old), "the library refuses a stale timestamp, and faucet signs the time it is given")
+	require.Error(t, verifier.Verify(body, old), "the library refuses a stale timestamp, and Superblink Events signs the time it is given")
 	require.NoError(t, verifier.VerifyIgnoringTimestamp(body, old))
 }
 

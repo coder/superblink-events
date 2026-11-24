@@ -49,7 +49,7 @@ const (
 	// finishTimeout lets an attempt that has ended record its result even when
 	// the run's context is done.
 	finishTimeout    = 5 * time.Second
-	deliveryAgent    = "faucet-webhook"
+	deliveryAgent    = "superblink-events-webhook"
 	messageIDPrefix  = "msg_"
 	messageIDEntropy = 16
 )

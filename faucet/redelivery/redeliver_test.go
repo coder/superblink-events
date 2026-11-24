@@ -81,7 +81,7 @@ func TestRedeliverAsksUntilFaucetStoresTheEventAndCountsItOnce(t *testing.T) {
 	first := env.run()
 	require.Equal(t, 1, first.Tracked)
 	require.Equal(t, 1, first.Asked)
-	require.True(t, env.stored("g1"), "the redelivery reached faucet, which stored the event")
+	require.True(t, env.stored("g1"), "the redelivery reached Superblink Events, which stored the event")
 
 	second := env.run()
 	require.Equal(t, 1, second.Recovered)
@@ -152,7 +152,7 @@ func TestRedeliverTracksOnlyWhatNormalizeStores(t *testing.T) {
 			stored++
 		}
 	}
-	require.Equal(t, 20, stored, "the table covers every event that faucet stores, and a status with an action, which it reads by its state")
+	require.Equal(t, 20, stored, "the table covers every event that Superblink Events stores, and a status with an action, which it reads by its state")
 }
 
 func TestRedeliverAsksAgainForAFailedPullRequestOpened(t *testing.T) {
@@ -161,7 +161,7 @@ func TestRedeliverAsksAgainForAFailedPullRequestOpened(t *testing.T) {
 	env.gh.recordEvent("opened", env.now().Add(-time.Minute), 500, "pull_request", "opened")
 
 	res := env.run()
-	require.Equal(t, 1, res.Tracked, "faucet stores every pull request action, so the sweep tracks a failed one")
+	require.Equal(t, 1, res.Tracked, "Superblink Events stores every pull request action, so the sweep tracks a failed one")
 	require.Equal(t, 1, res.Asked)
 	require.Len(t, env.gh.askedTimes("opened"), 1)
 }
@@ -190,9 +190,9 @@ func TestRedeliverDoesNotAskForADeliveryThatAlreadyWorked(t *testing.T) {
 
 		res := env.run()
 		require.Zero(t, res.Asked)
-		require.Equal(t, 1, res.Recovered, "a delivery that GitHub delivered later is recovered, though faucet stored nothing")
+		require.Equal(t, 1, res.Recovered, "a delivery that GitHub delivered later is recovered, though Superblink Events stored nothing")
 	})
-	t.Run("faucet stored the event though it answered 500", func(t *testing.T) {
+	t.Run("Superblink Events stored the event though it answered 500", func(t *testing.T) {
 		t.Parallel()
 		env := newRedeliveryEnv(t)
 		env.gh.record("g", env.now().Add(-20*time.Minute), 500)

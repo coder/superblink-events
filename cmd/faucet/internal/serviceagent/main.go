@@ -31,7 +31,7 @@ func main() {
 }
 
 func run() error {
-	endpoint := flag.String("url", "", "the MCP endpoint, such as https://faucet.example.com/github/mcp")
+	endpoint := flag.String("url", "", "the MCP endpoint, such as https://superblink-events.example.com/github/mcp")
 	clientID := flag.String("client-id", "", "the client ID")
 	repo := flag.String("repo", "", "the repository to wait on, owner/name")
 	types := flag.String("types", "", "the event types to wait for, comma separated")

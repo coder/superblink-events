@@ -39,7 +39,7 @@ const clientsUsage = `usage:
   ` + trustsUsage + `
   ` + untrustUsage + `
 
-The commands read DATABASE_URL and faucet's public URL as the server does:
+The commands read DATABASE_URL and Superblink Events' public URL as the server does:
 FAUCET_PUBLIC_URL, or on Vercel production https://$VERCEL_PROJECT_PRODUCTION_URL.
 -resource defaults to the public URL and /github/mcp, and must be that
 endpoint when FAUCET_PUBLIC_URL is set.
@@ -57,8 +57,8 @@ account.
 -no-secret makes a client with no secret, which the client credentials grant
 refuses, for workloads that log in with their own OIDC tokens. A trust rule
 lets a token that -issuer signs act as the client when it holds each -claim
-with that value. faucet takes the issuer's keys from its OpenID discovery
-document, or from -jwks-file, the issuer's JWK Set, for an issuer that faucet
+with that value. Superblink Events takes the issuer's keys from its OpenID discovery
+document, or from -jwks-file, the issuer's JWK Set, for an issuer that Superblink Events
 cannot reach. trust refuses a rule that pins too little for its issuer, and
 says what to pin. trusts lists the rules of a client with their IDs.`
 
@@ -167,7 +167,7 @@ func disableClient(ctx context.Context, id string, store clientStore, now time.T
 	if err != nil {
 		return xerrors.Errorf("%s is disabled, but its subscriptions could not be deleted, so run the command again: %w", c.ID, err)
 	}
-	_, err = fmt.Fprintf(stdout, "%s is disabled since %s, and faucet deleted its %d subscriptions. Its tokens fail on their next request.\n",
+	_, err = fmt.Fprintf(stdout, "%s is disabled since %s, and Superblink Events deleted its %d subscriptions. Its tokens fail on their next request.\n",
 		c.ID, c.DisabledAt.UTC().Format(time.RFC3339), deleted)
 	return err
 }
@@ -188,7 +188,7 @@ func createClient(ctx context.Context, args []string, store clientStore, publicU
 	if publicURL != nil {
 		defaultResource = publicURL.String() + clientEndpoint
 	}
-	resource := flags.String("resource", defaultResource, "the MCP endpoint that the client's tokens are for, such as https://faucet.example.com/github/mcp")
+	resource := flags.String("resource", defaultResource, "the MCP endpoint that the client's tokens are for, such as https://superblink-events.example.com/github/mcp")
 	scopeList := flags.String("scope", strings.Join(scopeNames(faucet.AllScopes()), ","), "the scopes that the client's tokens can hold, comma separated")
 	var grants grantFlags
 	flags.Var(&grants, "grant", "what the client may read: repo:<owner>/<name>, org:<login>, org:<login>#<account ID> or all; repeat it for more")
@@ -234,7 +234,7 @@ func createClient(ctx context.Context, args []string, store clientStore, publicU
 		if _, err := fmt.Fprintf(stdout, "client_secret: %s\n", secret); err != nil {
 			return err
 		}
-		next = "Keep the secret now: faucet stores only its hash and cannot show it again."
+		next = "Keep the secret now: Superblink Events stores only its hash and cannot show it again."
 	}
 	_, err = fmt.Fprintf(stderr, "The client holds %s. An org grant names the account after its #.\n%s\n", strings.Join(c.Grants, ", "), next)
 	return err
@@ -312,7 +312,7 @@ func updateClient(ctx context.Context, args []string, store clientStore, stdout,
 		if err != nil {
 			return xerrors.Errorf("%s holds no %s now, but its subscriptions could not be deleted, so run faucet clients update again: %w", id, faucet.ScopeEventsSubscribe, err)
 		}
-		if _, err := fmt.Fprintf(stdout, "It holds no %s, so faucet deleted its %d subscriptions.\n", faucet.ScopeEventsSubscribe, deleted); err != nil {
+		if _, err := fmt.Fprintf(stdout, "It holds no %s, so Superblink Events deleted its %d subscriptions.\n", faucet.ScopeEventsSubscribe, deleted); err != nil {
 			return err
 		}
 	}
@@ -333,7 +333,7 @@ func checkResource(resource string, pinned *url.URL) error {
 	}
 	origin, ok := strings.CutSuffix(resource, clientEndpoint)
 	if !ok {
-		return xerrors.Errorf("-resource must be faucet's public URL and %s; /mcp, the endpoint's old path, takes no new client", clientEndpoint)
+		return xerrors.Errorf("-resource must be Superblink Events' public URL and %s; /mcp, the endpoint's old path, takes no new client", clientEndpoint)
 	}
 	if _, err := parseOrigin(origin); err != nil {
 		return xerrors.Errorf("-resource: %w", err)
@@ -418,7 +418,7 @@ func trustClient(ctx context.Context, args []string, store oauth.Store, now time
 	claims := claimFlags{}
 	flags.Var(claims, "claim", "a claim that a token must hold, as <name>=<value>; repeat it for more")
 	var jwksFile string
-	flags.Func("jwks-file", "a file that holds the issuer's JWK Set, for an issuer that faucet cannot reach; without it, faucet fetches the keys that the issuer's discovery document names", func(path string) error {
+	flags.Func("jwks-file", "a file that holds the issuer's JWK Set, for an issuer that Superblink Events cannot reach; without it, Superblink Events fetches the keys that the issuer's discovery document names", func(path string) error {
 		// A shell passes an empty path for an unset variable.
 		if path == "" {
 			return xerrors.New("it names no file: leave -jwks-file out for the keys that the issuer's discovery document names")

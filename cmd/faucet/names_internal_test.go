@@ -165,7 +165,7 @@ func TestABurstOfDeliveriesAfterAnOwnerRenameLeavesTheOwnerResolving(t *testing.
 				})
 			}
 			wg.Wait()
-			require.EqualValues(t, 1, github.calls.Load(), "faucet asked GitHub once")
+			require.EqualValues(t, 1, github.calls.Load(), "Superblink Events asked GitHub once")
 			got, err := srv.store.OwnerByID(context.Background(), 7)
 			require.NoError(t, err, "the account that GitHub confirmed is not quarantined")
 			require.Equal(t, faucet.Owner{ID: 7, Login: "new"}, got)

@@ -297,7 +297,7 @@ func TestFakeGitHubSendsTheDateTakesTheTimeAndRefusesTheCursorThatATestSets(t *t
 
 		first, err := env.gh.ListDeliveries(ctx, "")
 		require.NoError(t, err)
-		require.True(t, env.now().Add(time.Hour).Equal(first.At), "the Date is on GitHub's clock, not faucet's")
+		require.True(t, env.now().Add(time.Hour).Equal(first.At), "the Date is on GitHub's clock, not Superblink Events'")
 
 		env.gh.date = func(call int, cursor string, at time.Time) time.Time {
 			if cursor != "" {

@@ -294,7 +294,7 @@ func TestAServiceReadsRawEventsOnceAnIgnoredDeliveryNamedTheRepository(t *testin
 	var denied *jsonrpc.Error
 	require.ErrorAs(t, err, &denied)
 	require.EqualValues(t, -32024, denied.Code)
-	require.Contains(t, denied.Message, "faucet has received no webhook delivery from o/r yet")
+	require.Contains(t, denied.Message, "Superblink Events has received no webhook delivery from o/r yet")
 
 	status, body := deliverPush(ctx, t, srv.Server, "nobody-asked")
 	require.Equal(t, http.StatusAccepted, status, body)
@@ -340,6 +340,6 @@ func TestLoadConfigRawEvents(t *testing.T) {
 	for _, events := range []string{"pushes", "push,", "github.push", "pull_request"} {
 		_, err = load(events)
 		require.ErrorContains(t, err, envRawEvents, events)
-		require.ErrorContains(t, err, "not a GitHub event that faucet can offer raw", events)
+		require.ErrorContains(t, err, "not a GitHub event that Superblink Events can offer raw", events)
 	}
 }

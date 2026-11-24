@@ -71,7 +71,7 @@ func TestAFaucetTokenThatDoesNotVerifyIsRefused(t *testing.T) {
 		requireRefused(t, srv, token)
 	}
 	logs := srv.logs.String()
-	requireLoggedAt(t, logs, "faucet token rejected", "[debu]")
+	requireLoggedAt(t, logs, "Superblink Events token rejected", "[debu]")
 	require.Contains(t, logs, "not an access token", "the debug log says why")
 	require.Contains(t, logs, "unknown access token")
 	require.NotContains(t, logs, ".go:", "each rejection is one line, with no stack frame")
@@ -151,7 +151,7 @@ func TestAFaucetTokenCheckThatCannotRunIsAServerError(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, status)
 	require.Empty(t, challenge, "a check that could not run is not a rejected token")
 	require.Equal(t, "could not check the token\n", body)
-	requireLoggedAt(t, srv.logs.String(), "could not check the faucet token", "[warn]")
+	requireLoggedAt(t, srv.logs.String(), "could not check the Superblink Events token", "[warn]")
 	require.Zero(t, strings.Count(srv.logs.String(), randomPart(token)), "the log never holds the token, nor a piece of it")
 }
 
@@ -311,9 +311,9 @@ func TestAResolverThatAnswersForAnotherPrincipalIsAServerError(t *testing.T) {
 	})
 	token := srv.issue(t, []faucet.Scope{faucet.ScopeEventsRead})
 	status, challenge, body := rawPost(t, srv, "Bearer "+token)
-	require.Equal(t, http.StatusInternalServerError, status, "faucet's own bug is not the caller's bad token")
+	require.Equal(t, http.StatusInternalServerError, status, "Superblink Events' own bug is not the caller's bad token")
 	require.Empty(t, challenge)
 	require.Equal(t, "could not check the token\n", body)
-	requireLoggedAt(t, srv.logs.String(), "could not check the faucet token", "[warn]")
+	requireLoggedAt(t, srv.logs.String(), "could not check the Superblink Events token", "[warn]")
 	requireNoTokenPiece(t, srv.logs.String(), []string{token})
 }

@@ -248,7 +248,7 @@ func TestGitHubHookAdminSendsAHostileLinkAndCursorNowhereElse(t *testing.T) {
 	_, err = admin.ListDeliveries(context.Background(), first.Next)
 	require.NoError(t, err)
 
-	require.Zero(t, elsewhere.requests.Load(), "the Link header names a URL, and faucet must not call it")
+	require.Zero(t, elsewhere.requests.Load(), "the Link header names a URL, and Superblink Events must not call it")
 	second := stub.recorded()[1]
 	require.Equal(t, "/orgs/octo-org/hooks/9/deliveries", second.path)
 	require.Equal(t, url.Values{"per_page": {"100"}, "cursor": {"a b&c=d"}}, second.query, "the cursor is one escaped value, not new parameters")

@@ -320,7 +320,7 @@ func userRepo(repo string) (string, error) {
 func userSession(p faucet.Principal) (faucet.OAuthSession, error) {
 	session, ok := p.OAuthSession()
 	if !ok {
-		return faucet.OAuthSession{}, xerrors.Errorf("only a user who logged in through a browser is checked with the GitHub token that faucet keeps: %w", faucet.ErrNoAccess)
+		return faucet.OAuthSession{}, xerrors.Errorf("only a user who logged in through a browser is checked with the GitHub token that Superblink Events keeps: %w", faucet.ErrNoAccess)
 	}
 	return session, nil
 }
