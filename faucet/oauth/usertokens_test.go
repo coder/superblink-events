@@ -34,7 +34,7 @@ const usertokensSoon = 8*time.Hour - 5*time.Minute
 // is about to expire. GitHub's refresh tokens work once, so a second refresh
 // with the old one is refused, which ends every session of the user. With
 // one GitHub refresh per connection at a time, which reads the pair again
-// under the lock, GitHub sees one refresh and every session stays (R2).
+// under the lock, GitHub sees one refresh and every session stays.
 func TestSessionsOfOneUserThatRefreshAtOnceRefreshTheGitHubTokenOnce(t *testing.T) {
 	t.Parallel()
 	for name, newStore := range usertokensStores {
@@ -70,7 +70,7 @@ func TestSessionsOfOneUserThatRefreshAtOnceRefreshTheGitHubTokenOnce(t *testing.
 }
 
 // GitHub refusing the refresh token of a connection ends the sessions of
-// that connection, and of no other (R2).
+// that connection, and of no other.
 func TestGitHubRefusingARefreshTokenEndsTheSessionsOfThatUserOnly(t *testing.T) {
 	t.Parallel()
 	for name, newStore := range usertokensStores {
@@ -121,7 +121,7 @@ func (h *grantHarness) userAccess() oauth.UserAccess {
 
 // The principal of an access token carries the token's own session, never
 // another session of the same user, so that the access check of one session
-// is never taken for another's (R13).
+// is never taken for another's.
 func TestEachSessionOfAUserResolvesToItsOwnSession(t *testing.T) {
 	t.Parallel()
 	h := newGrantHarness(t, newFakeStore())
@@ -146,7 +146,7 @@ func TestEachSessionOfAUserResolvesToItsOwnSession(t *testing.T) {
 
 // An access check of one session does not answer for another session of
 // the user that logged in after it: that one asks GitHub again, and GitHub's
-// answer stands (R13).
+// answer stands.
 func TestAnAccessCheckOfOneSessionDoesNotAnswerForAnother(t *testing.T) {
 	t.Parallel()
 	h := newGrantHarness(t, newFakeStore())

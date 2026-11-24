@@ -89,8 +89,7 @@ func serve(contentType string, body func(r *http.Request) string) http.HandlerFu
 
 func validDocument(r *http.Request) string { return documentFor(requestedURL(r), nil) }
 
-// VS Code serves its document as application/json; charset=utf-8 (review
-// finding R15).
+// VS Code serves its document as application/json; charset=utf-8.
 func TestADocumentWithACharsetParameterIsRead(t *testing.T) {
 	t.Parallel()
 

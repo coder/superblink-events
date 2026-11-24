@@ -203,7 +203,7 @@ func connectSubscriber(ctx context.Context, t *testing.T, srv *testServer, token
 	return session
 }
 
-// The finding (R12): an events:read token must read and must not subscribe.
+// An events:read token must read and must not subscribe.
 func TestAReadOnlyFaucetTokenPollsButCannotSubscribe(t *testing.T) {
 	t.Parallel()
 
@@ -265,7 +265,7 @@ func (a *sessionChecks) RepoIDFresh(_ context.Context, p faucet.Principal, _ str
 	return 0, faucet.ErrNoAccess
 }
 
-// The finding (R13): an access check that one session made fresh must not be
+// An access check that one session made fresh must not be
 // fresh for another session of the same connection.
 func TestAnAccessCheckIsFreshOnlyForTheSessionOfTheToken(t *testing.T) {
 	t.Parallel()

@@ -246,7 +246,7 @@ func TestThePurgeDeletesExpiredAccessTokens(t *testing.T) {
 
 // A service agent logs in with the client credentials that an operator made,
 // and no GitHub token. go-sdk's handler finds faucet's login server from the
-// 401, sends no resource and asks for every scope of the challenge (R4).
+// 401, sends no resource and asks for every scope of the challenge.
 func TestAServiceLogsInWithClientCredentialsAloneAndWaitsForAnEvent(t *testing.T) {
 	t.Parallel()
 	srv := newLoginServer(t)
@@ -275,7 +275,7 @@ func TestAServiceLogsInWithClientCredentialsAloneAndWaitsForAnEvent(t *testing.T
 }
 
 // The /mcp alias is its own resource with its own metadata document, so
-// go-sdk's check that the document names the URL it called passes (R5).
+// go-sdk's check that the document names the URL it called passes.
 func TestTheMCPAliasHasItsOwnDiscovery(t *testing.T) {
 	t.Parallel()
 	srv := newLoginServer(t)
@@ -390,7 +390,7 @@ func TestDisablingAClientFailsItsTokenOnTheNextRequest(t *testing.T) {
 	require.Error(t, err, "the next request is refused, and the handler gets no new token")
 }
 
-// R16: a client computes the resource from the URL it was given, byte for
+// A client computes the resource from the URL it was given, byte for
 // byte, so faucet refuses to start with a public URL in any other form.
 func TestLoadConfigTakesThePublicURLOnlyInTheFormAClientComputes(t *testing.T) {
 	t.Parallel()
@@ -572,7 +572,7 @@ func subscribeTo(ctx context.Context, session *mcp.ClientSession, repo string) e
 	return err
 }
 
-// Every renewal of a service checks access again at its source (R3), through
+// Every renewal of a service checks access again at its source, through
 // the Authorizer that run() composes: the client's row, past the grants that
 // the token check read. TestABrowserUserAsksGitHubOnceForReadsAndAtEveryRenewal
 // checks the other kind of caller, a person who logged in through a browser.
