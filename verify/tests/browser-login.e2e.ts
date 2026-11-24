@@ -290,7 +290,7 @@ describe('browser login', () => {
       expect(consent.status).toBe(200);
       expect(Object.keys(fields)).toEqual(['request', 'login', 'token']);
       expect(answer.status).toBe(403);
-      expect(output(), 'the browser sent the Origin of the page that posted the form').toContain("the Origin header is not faucet's issuer");
+      expect(output(), 'the browser sent the Origin of the page that posted the form').toContain("the Origin header is not Superblink Events' issuer");
       expect(githubLogins(await hooks.requests(), started)).toEqual([]);
       expect(site.requests('/steal'), "no code reached the attacker's redirect URI").toEqual([]);
       expect(stored, 'neither the consent page nor the refused consent stored a request').toBe('0');

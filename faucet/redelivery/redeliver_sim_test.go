@@ -195,10 +195,10 @@ func TestSimAnOutageIsRecoveredWithoutASilentLoss(t *testing.T) {
 		name string
 		spec simSpec
 	}{
-		{"150 an hour, 60 minute outage, faucet down", simSpec{phases: steady(150, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
-		{"300 an hour, 60 minute outage, faucet down", simSpec{phases: steady(300, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
-		{"600 an hour, 60 minute outage, faucet down", simSpec{phases: steady(600, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
-		{"600 an hour, 30 minute outage, faucet down", simSpec{phases: steady(600, 6*time.Hour), outageFrom: time.Minute, outageLength: 30 * time.Minute}},
+		{"150 an hour, 60 minute outage, Superblink Events down", simSpec{phases: steady(150, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
+		{"300 an hour, 60 minute outage, Superblink Events down", simSpec{phases: steady(300, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
+		{"600 an hour, 60 minute outage, Superblink Events down", simSpec{phases: steady(600, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute}},
+		{"600 an hour, 30 minute outage, Superblink Events down", simSpec{phases: steady(600, 6*time.Hour), outageFrom: time.Minute, outageLength: 30 * time.Minute}},
 		{"300 an hour, 60 minute outage, cron keeps running", simSpec{phases: steady(300, 6*time.Hour), outageFrom: time.Minute, outageLength: 60 * time.Minute, cronDuringOutage: true}},
 		{"1 an hour, 35 minute outage", simSpec{phases: steady(1, 6*time.Hour), outageFrom: -time.Minute, outageLength: 36 * time.Minute, cronDuringOutage: true}},
 	} {
@@ -378,7 +378,7 @@ func TestSimAnOutageLongerThanGitHubKeepsADeliveryLosesNothingSilentlyWhateverTh
 					blip:         func(_, i int) bool { return i%2 == 0 },
 					horizon:      96 * time.Hour,
 				})
-				t.Logf("RESULT 6 an hour, faucet and cron down for %s, GitHub's clock %s ahead of faucet's: %s", outage, skew, out)
+				t.Logf("RESULT 6 an hour, Superblink Events and cron down for %s, GitHub's clock %s ahead of Superblink Events': %s", outage, skew, out)
 				require.Greater(t, out.failed, 400)
 				require.Zero(t, out.silentLost)
 				if outage > redelivery.GitHubDeliveryRetention {

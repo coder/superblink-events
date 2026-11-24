@@ -45,7 +45,7 @@ func Call(ctx context.Context, client *http.Client, base *url.URL, token, method
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "coder-faucet")
+	req.Header.Set("User-Agent", "coder-superblink-events")
 
 	if client == nil {
 		client = http.DefaultClient

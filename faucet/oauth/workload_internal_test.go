@@ -689,9 +689,9 @@ func TestAFailedFetchKeepsTheKeysThatFaucetHolds(t *testing.T) {
 	clock.Advance(keyFetchInterval)
 	for range 3 {
 		err := check("made-up")
-		require.ErrorIs(t, err, errIssuerKeys, "a kid that faucet lacks while its issuer fails")
+		require.ErrorIs(t, err, errIssuerKeys, "a kid that Superblink Events lacks while its issuer fails")
 		require.NotErrorIs(t, err, errSubjectToken)
-		require.NoError(t, check(testKID), "a kid of the keys that faucet holds")
+		require.NoError(t, check(testKID), "a kid of the keys that Superblink Events holds")
 	}
 	require.Equal(t, 2, s.hitsOf(testVercelKeys))
 

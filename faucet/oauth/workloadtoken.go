@@ -146,7 +146,7 @@ func (c *workloadChecker) match(ctx context.Context, rule trustRule, jws *jose.J
 	case registered.IssuedAt != nil && registered.IssuedAt.Time().After(now.Add(workloadClockLeeway)):
 		return time.Time{}, refuseSigned("its iat is in the future")
 	case delegated:
-		return time.Time{}, refuseSigned("its act claim names another party, the delegation of RFC 8693, and faucet takes only a workload's own token")
+		return time.Time{}, refuseSigned("its act claim names another party, the delegation of RFC 8693, and Superblink Events takes only a workload's own token")
 	case issued == nil:
 		return time.Time{}, refuseSigned("it must have an iat or an nbf")
 	case registered.Expiry.Time().Sub(issued.Time()) > maxSubjectTokenLifetime:

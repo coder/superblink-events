@@ -111,7 +111,7 @@ func NewServer(d ServerDeps) (*Server, error) {
 	case d.Clock == nil:
 		return nil, xerrors.New("clock is required")
 	case d.Issuer == "" || strings.HasSuffix(d.Issuer, "/"):
-		return nil, xerrors.New("the issuer is faucet's public URL, with no trailing slash")
+		return nil, xerrors.New("the issuer is Superblink Events' public URL, with no trailing slash")
 	case len(d.Resources) == 0:
 		return nil, xerrors.New("the server needs the endpoints that it serves")
 	}
@@ -272,7 +272,7 @@ func (s *Server) AuthorizeHandler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		s.logger.Info(r.Context(), "authorization request refused, no grant uses the endpoint")
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "unsupported_response_type", "error_description": "faucet takes no grant through the authorization endpoint: its browser login is off",
+			"error": "unsupported_response_type", "error_description": "Superblink Events takes no grant through the authorization endpoint: its browser login is off",
 		})
 	})
 }
@@ -342,7 +342,7 @@ func (s *Server) writeTokenError(w http.ResponseWriter, r *http.Request, err err
 	}
 	s.logger.Info(r.Context(), request+" refused", slog.F("error", te.code), slog.F("reason", te.description))
 	if te.status == http.StatusUnauthorized {
-		w.Header().Set("WWW-Authenticate", `Basic realm="faucet"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="Superblink Events"`)
 	}
 	if te.retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int((te.retryAfter+time.Second-1)/time.Second)))
@@ -367,7 +367,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) (tokenResponse, e
 	case name == "":
 		return tokenResponse{}, badRequest("invalid_request", "grant_type is required")
 	case !ok:
-		return tokenResponse{}, badRequest("unsupported_grant_type", "faucet takes the grant types "+strings.Join(slices.Sorted(maps.Keys(s.grants)), ", "))
+		return tokenResponse{}, badRequest("unsupported_grant_type", "Superblink Events takes the grant types "+strings.Join(slices.Sorted(maps.Keys(s.grants)), ", "))
 	}
 	return g.issue(s, r, form)
 }

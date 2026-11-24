@@ -260,7 +260,7 @@ func TestADeliveryWritesTheLoginOfAnAccountOnlyWhenItChanged(t *testing.T) {
 	require.Equal(t, 1, store.ownerWriteCount(), "the organization owns the repository, so one write records both")
 	push("acme")
 	push("acme")
-	require.Equal(t, 1, store.ownerWriteCount(), "a login that faucet holds writes nothing")
+	require.Equal(t, 1, store.ownerWriteCount(), "a login that Superblink Events holds writes nothing")
 	push("Acme")
 	require.Equal(t, 2, store.ownerWriteCount(), "a login whose case changed is written as GitHub writes it")
 	got, err := store.OwnerByLogin(context.Background(), "acme")
@@ -292,7 +292,7 @@ func pushNaming(id, ownerID int64, fullName string) []byte {
 
 // staleNameWarning is the start of the line that faucet logs when a rename
 // or transfer names a name that it does not hold.
-const staleNameWarning = "a rename or transfer of the repository never reached faucet"
+const staleNameWarning = "a rename or transfer of the repository never reached Superblink Events"
 
 func loggingTo(logs *bytes.Buffer) func(*faucet.Deps) {
 	return func(d *faucet.Deps) { d.Logger = slog.Make(sloghuman.Sink(logs)) }
@@ -367,7 +367,7 @@ func TestATransferAfterAMissedRenameUnbindsTheRepository(t *testing.T) {
 			for _, name := range []string{"coder/r", "coder/s", "acme/s"} {
 				requireUnbound(t, store, name)
 			}
-			require.Equal(t, 1, strings.Count(logs.String(), staleNameWarning), "the operator learns that faucet missed a rename")
+			require.Equal(t, 1, strings.Count(logs.String(), staleNameWarning), "the operator learns that Superblink Events missed a rename")
 
 			requireAcknowledged(t, handler, "push", "d-4", pushNaming(5, 10, "acme/s"))
 			requireUnbound(t, store, "acme/s")
@@ -451,7 +451,7 @@ func TestWebhookFollowsGitHubsSampleTransferAndRename(t *testing.T) {
 	requireAcknowledged(t, handler, "repository", "d-3", renamed)
 	requireBoundTo(t, store, "octocoders/hello-faucet", faucet.Repository{ID: 186853261, OwnerID: 38302899, OwnerLogin: "Octocoders", FullName: "Octocoders/Hello-Faucet"})
 	requireUnbound(t, store, "Octocoders/Hello-World")
-	require.NotContains(t, logs.String(), staleNameWarning, "each sample moved the repository from the name that faucet held")
+	require.NotContains(t, logs.String(), staleNameWarning, "each sample moved the repository from the name that Superblink Events held")
 }
 
 // A host that records repositories needs every rename and transfer, so

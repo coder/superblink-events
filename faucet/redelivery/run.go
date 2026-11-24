@@ -412,7 +412,7 @@ func (r *redeliveryRun) loadWants(ctx context.Context) wanted {
 	defer cancel()
 	want, err := r.runner.wants(wantCtx)
 	if err != nil {
-		r.logger.Error(ctx, "the raw interests could not be read, this run tracks every delivery that faucet may store raw", slog.Error(err))
+		r.logger.Error(ctx, "the raw interests could not be read, this run tracks every delivery that Superblink Events may store raw", slog.Error(err))
 		if want == nil {
 			return func(string, string, int64) bool { return true }
 		}
@@ -616,7 +616,7 @@ func (r *redeliveryRun) settle(ctx context.Context) error {
 		return xerrors.Errorf("settle deliveries: %w", err)
 	}
 	r.res.Pending = res.Pending
-	r.countRecovered(ctx, res.Recovered, "faucet stored the event")
+	r.countRecovered(ctx, res.Recovered, "Superblink Events stored the event")
 	for _, g := range res.GaveUp {
 		switch g.Reason {
 		case GiveUpLimit:

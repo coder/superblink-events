@@ -118,7 +118,7 @@ func requireTokenRequest(t *testing.T, got recordedRequest, form url.Values) {
 	require.Equal(t, http.MethodPost, got.method)
 	require.Equal(t, "/login/oauth/access_token", got.path)
 	require.Equal(t, "application/json", got.header.Get("Accept"))
-	require.Equal(t, "coder-faucet", got.header.Get("User-Agent"))
+	require.Equal(t, "coder-superblink-events", got.header.Get("User-Agent"))
 	require.Equal(t, "application/x-www-form-urlencoded", got.header.Get("Content-Type"))
 	require.Empty(t, got.header.Get("Authorization"))
 	require.Equal(t, form, got.form)
@@ -300,7 +300,7 @@ func TestUserReadsTheIDAndLoginThatTheTokenBelongsTo(t *testing.T) {
 	require.Equal(t, http.MethodGet, got.method)
 	require.Equal(t, "/api/v3/user", got.path)
 	require.Equal(t, "Bearer "+stubAccess, got.header.Get("Authorization"))
-	require.Equal(t, "coder-faucet", got.header.Get("User-Agent"))
+	require.Equal(t, "coder-superblink-events", got.header.Get("User-Agent"))
 }
 
 func TestUserTellsARejectedTokenFromTheRateLimitAndFromOtherAnswers(t *testing.T) {

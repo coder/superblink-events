@@ -192,7 +192,7 @@ func (a ServiceAccess) repoGranted(ctx context.Context, grants []clientGrant, re
 				return 0, notGranted
 			}
 		}
-		return 0, xerrors.Errorf("faucet has received no webhook delivery from %s yet, so it cannot tell which repository the grant names; it can once GitHub sends one: %w", repo, faucet.ErrNoAccess)
+		return 0, xerrors.Errorf("Superblink Events has received no webhook delivery from %s yet, so it cannot tell which repository the grant names; it can once GitHub sends one: %w", repo, faucet.ErrNoAccess)
 	case err != nil:
 		return 0, xerrors.Errorf("look up the repository: %w", err)
 	case named || slices.ContainsFunc(grants, func(g clientGrant) bool { return g.accountID == r.OwnerID }):
@@ -231,7 +231,7 @@ func (a ServiceAccess) ownerGranted(ctx context.Context, grants []clientGrant, o
 	o, err := a.repos.OwnerByLogin(ctx, owner)
 	switch {
 	case xerrors.Is(err, faucet.ErrUnknownOwner) && all:
-		return 0, xerrors.Errorf("faucet has received no webhook delivery from a repository of %s yet, so it cannot tell which owner the grant names; it can once GitHub sends one: %w", owner, faucet.ErrNoAccess)
+		return 0, xerrors.Errorf("Superblink Events has received no webhook delivery from a repository of %s yet, so it cannot tell which owner the grant names; it can once GitHub sends one: %w", owner, faucet.ErrNoAccess)
 	case xerrors.Is(err, faucet.ErrUnknownOwner):
 		return 0, notGranted
 	case err != nil:

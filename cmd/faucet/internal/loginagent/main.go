@@ -51,7 +51,7 @@ type outcome struct {
 }
 
 func run() error {
-	endpoint := flag.String("url", "", "the MCP endpoint, such as https://faucet.example.com/github/mcp")
+	endpoint := flag.String("url", "", "the MCP endpoint, such as https://superblink-events.example.com/github/mcp")
 	clientID := flag.String("client-id", "", "the https URL of the agent's client ID metadata document")
 	redirectURI := flag.String("redirect-uri", "http://127.0.0.1:53682/callback", "where the login sends the browser back to")
 	repo := flag.String("repo", "", "the repository to wait on, owner/name")

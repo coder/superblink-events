@@ -133,7 +133,7 @@ func TestVerifyRejectsATokenForAnotherResource(t *testing.T) {
 	token := newAccessToken(t)
 	h.issue(token, func(at *oauth.AccessToken) { at.Resource = "https://faucet.example.com/mcp" })
 	h.requireRejected(token, "a token is valid only on the resource it was issued for")
-	h.requireRejected(newAccessToken(t), "a token that faucet never stored")
+	h.requireRejected(newAccessToken(t), "a token that Superblink Events never stored")
 }
 
 func TestVerifyRejectsATokenWhoseSubjectEnded(t *testing.T) {
@@ -152,7 +152,7 @@ func TestVerifyRejectsASubjectKindWithNoResolver(t *testing.T) {
 	h := newVerifierHarness(t, oauth.SubjectService)
 	token := newAccessToken(t)
 	h.issue(token, func(at *oauth.AccessToken) { at.SubjectKind, at.Subject = oauth.SubjectUser, "sess_1" })
-	h.requireRejected(token, "faucet cannot tell whether such a subject is live")
+	h.requireRejected(token, "Superblink Events cannot tell whether such a subject is live")
 }
 
 func TestVerifyRejectsWhatIsNotAnAccessTokenWithoutReadingTheStore(t *testing.T) {
@@ -264,7 +264,7 @@ func TestVerifyRefusesAPrincipalThatIsNotTheTokensSubject(t *testing.T) {
 			}))
 			p, err := v.Verify(context.Background(), token, resource)
 			require.Error(t, err, "the resolver answered for someone the token was not issued to")
-			require.NotErrorIs(t, err, faucet.ErrInvalidToken, "a resolver that answers for another principal is a faucet bug, not a bad token")
+			require.NotErrorIs(t, err, faucet.ErrInvalidToken, "a resolver that answers for another principal is a Superblink Events server bug, not a bad token")
 			require.Equal(t, faucet.Principal{}, p)
 		})
 	}

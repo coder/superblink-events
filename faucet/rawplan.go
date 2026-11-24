@@ -26,7 +26,7 @@ const (
 // event of a target that has maxRawInterestsPerTarget of them.
 func rawInterestLimitError(entry *rawEntry, target targetArguments) error {
 	return rpcError(codeResourceExhausted,
-		fmt.Sprintf("raw interest limit reached: %s of %s has %d live subscriptions and poll leases, the most that faucet keeps for one event of one target",
+		fmt.Sprintf("raw interest limit reached: %s of %s has %d live subscriptions and poll leases, the most that Superblink Events keeps for one event of one target",
 			entry.name, target.describe(), maxRawInterestsPerTarget),
 		map[string]any{"limit": "raw_interests", "max": maxRawInterestsPerTarget})
 }

@@ -100,25 +100,25 @@ func TestAnAuthorizationRequestThatFaucetDoesNotTakeIsAnErrorPageAndNoRedirect(t
 		// detail is in what the page tells the client's developer.
 		detail string
 	}{
-		"a parameter that appears twice":              {func(q url.Values) { q.Add("state", "again") }, "each parameter must appear at most once"},
-		"no client_id":                                {func(q url.Values) { q.Del("client_id") }, "client_id is required"},
-		"a client_id over http":                       {func(q url.Values) { q.Set("client_id", strings.Replace(client.id, "https:", "http:", 1)) }, "must be an https URL"},
-		"a client_id whose host is not ASCII":         {func(q url.Values) { q.Set("client_id", "https://vѕcode.dev/agent.json") }, "must be ASCII"},
-		"a client_id where no document is":            {func(q url.Values) { q.Set("client_id", h.docs.URL+"/missing.json") }, "status 200"},
-		"a document that names another client":        {func(q url.Values) { q.Set("client_id", impostor.id) }, "client_id must equal its URL"},
-		"no redirect_uri":                             {func(q url.Values) { q.Del("redirect_uri") }, "redirect_uri is required"},
-		"a redirect_uri that the document lacks":      {func(q url.Values) { q.Set("redirect_uri", h.agents.URL+"/cb/elsewhere") }, "redirect_uri must be one of"},
-		"no response_type":                            {func(q url.Values) { q.Del("response_type") }, "response_type must be code"},
-		"the response_type token":                     {func(q url.Values) { q.Set("response_type", "token") }, "response_type must be code"},
-		"no code_challenge":                           {func(q url.Values) { q.Del("code_challenge") }, "code_challenge must be"},
-		"a code_challenge of 42 characters":           {func(q url.Values) { q.Set("code_challenge", strings.Repeat("a", 42)) }, "code_challenge must be"},
-		"a code_challenge of 43 other characters":     {func(q url.Values) { q.Set("code_challenge", strings.Repeat("+", 43)) }, "code_challenge must be"},
-		"no code_challenge_method":                    {func(q url.Values) { q.Del("code_challenge_method") }, "code_challenge_method must be S256"},
-		"the code_challenge_method plain":             {func(q url.Values) { q.Set("code_challenge_method", "plain") }, "code_challenge_method must be S256"},
-		"no resource":                                 {func(q url.Values) { q.Del("resource") }, "resource must be an endpoint"},
-		"an endpoint that this faucet does not serve": {func(q url.Values) { q.Set("resource", h.issuer+"/other/mcp") }, "resource must be an endpoint"},
-		"only scopes that faucet does not know":       {func(q url.Values) { q.Set("scope", "repo admin:org") }, "scope must name at least one scope"},
-		"a state of 2049 bytes":                       {func(q url.Values) { q.Set("state", strings.Repeat("s", 2049)) }, "state must be at most 2048 bytes"},
+		"a parameter that appears twice":                                {func(q url.Values) { q.Add("state", "again") }, "each parameter must appear at most once"},
+		"no client_id":                                                  {func(q url.Values) { q.Del("client_id") }, "client_id is required"},
+		"a client_id over http":                                         {func(q url.Values) { q.Set("client_id", strings.Replace(client.id, "https:", "http:", 1)) }, "must be an https URL"},
+		"a client_id whose host is not ASCII":                           {func(q url.Values) { q.Set("client_id", "https://vѕcode.dev/agent.json") }, "must be ASCII"},
+		"a client_id where no document is":                              {func(q url.Values) { q.Set("client_id", h.docs.URL+"/missing.json") }, "status 200"},
+		"a document that names another client":                          {func(q url.Values) { q.Set("client_id", impostor.id) }, "client_id must equal its URL"},
+		"no redirect_uri":                                               {func(q url.Values) { q.Del("redirect_uri") }, "redirect_uri is required"},
+		"a redirect_uri that the document lacks":                        {func(q url.Values) { q.Set("redirect_uri", h.agents.URL+"/cb/elsewhere") }, "redirect_uri must be one of"},
+		"no response_type":                                              {func(q url.Values) { q.Del("response_type") }, "response_type must be code"},
+		"the response_type token":                                       {func(q url.Values) { q.Set("response_type", "token") }, "response_type must be code"},
+		"no code_challenge":                                             {func(q url.Values) { q.Del("code_challenge") }, "code_challenge must be"},
+		"a code_challenge of 42 characters":                             {func(q url.Values) { q.Set("code_challenge", strings.Repeat("a", 42)) }, "code_challenge must be"},
+		"a code_challenge of 43 other characters":                       {func(q url.Values) { q.Set("code_challenge", strings.Repeat("+", 43)) }, "code_challenge must be"},
+		"no code_challenge_method":                                      {func(q url.Values) { q.Del("code_challenge_method") }, "code_challenge_method must be S256"},
+		"the code_challenge_method plain":                               {func(q url.Values) { q.Set("code_challenge_method", "plain") }, "code_challenge_method must be S256"},
+		"no resource":                                                   {func(q url.Values) { q.Del("resource") }, "resource must be an endpoint"},
+		"an endpoint that this Superblink Events server does not serve": {func(q url.Values) { q.Set("resource", h.issuer+"/other/mcp") }, "resource must be an endpoint"},
+		"only scopes that Superblink Events does not know":              {func(q url.Values) { q.Set("scope", "repo admin:org") }, "scope must name at least one scope"},
+		"a state of 2049 bytes":                                         {func(q url.Values) { q.Set("state", strings.Repeat("s", 2049)) }, "state must be at most 2048 bytes"},
 	} {
 		q := h.request(client)
 		c.edit(q)
@@ -151,7 +151,7 @@ func TestTheErrorPageOfADocumentThatCannotBeFetchedKeepsTheCauseToTheLog(t *test
 	page := h.newBrowser(t).authorize(q)
 	require.Equal(t, http.StatusBadRequest, page.status)
 	require.Empty(t, page.header.Get("Location"))
-	require.Contains(t, page.body, "faucet could not fetch the client&#39;s document")
+	require.Contains(t, page.body, "Superblink Events could not fetch the client&#39;s document")
 	for _, cause := range []string{"connection refused", "dial tcp", "connect:"} {
 		require.NotContains(t, page.body, cause)
 	}
@@ -201,9 +201,9 @@ func TestTheConsentPageSaysWhoAsksForWhatAndWhereTheBrowserReturns(t *testing.T)
 	require.Contains(t, page.body, "says it is <strong>Agent agent</strong>")
 	require.Contains(t, page.body, "<code>"+h.resource+"</code>")
 	require.Contains(t, page.body, "<code>events:read</code>: wait for and read the GitHub events")
-	require.Contains(t, page.body, "<code>events:subscribe</code>: have faucet send those events")
+	require.Contains(t, page.body, "<code>events:subscribe</code>: have Superblink Events send those events")
 	require.Contains(t, page.body, "returns to</dt>\n<dd><code>"+client.redirectURI+"</code>")
-	require.Contains(t, page.body, "faucet keeps the GitHub token that it gets there for you, sealed, and gives this app only its own faucet token")
+	require.Contains(t, page.body, "Superblink Events keeps the GitHub token that it gets there for you, sealed, and gives this app only its own Superblink Events token")
 	require.Contains(t, page.body, `<form method="post" action="/oauth/authorize">`)
 
 	consent := b.consentOf(page)

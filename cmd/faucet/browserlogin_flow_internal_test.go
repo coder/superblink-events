@@ -228,7 +228,7 @@ func TestAGitHubTokenGetsTheLoginChallengeAndNeverReachesGitHub(t *testing.T) {
 	}
 	srv.github.mu.Lock()
 	defer srv.github.mu.Unlock()
-	require.Empty(t, srv.github.apiCalls, "faucet sends no bearer to GitHub")
+	require.Empty(t, srv.github.apiCalls, "Superblink Events sends no bearer to GitHub")
 	require.NotContains(t, srv.logs.String(), "pasted0123456789", "no log line holds the token")
 }
 
@@ -349,7 +349,7 @@ func TestAnAgentLogsInThroughABrowserAndWaitsForAnEvent(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &out))
 	require.Len(t, out.Events, 1)
 	require.Equal(t, int64(300029405), out.Events[0].RepoID)
-	require.Equal(t, 1, srv.github.calls("/repos/"+browserFixtureRepo), "GitHub answered for the repository with the token that faucet keeps")
+	require.Equal(t, 1, srv.github.calls("/repos/"+browserFixtureRepo), "GitHub answered for the repository with the token that Superblink Events keeps")
 
 	hidden, err := call(ctx, session, "octo-org/hidden", map[string]any{"cursor": "v2.0", "timeout_s": 1})
 	require.NoError(t, err)

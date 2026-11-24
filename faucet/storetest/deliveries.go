@@ -611,7 +611,7 @@ func finishDeliveryGiveUpRecordsOnlyWhatTheEndpointSaid(t *testing.T, s faucet.S
 	res := r.finish(ours.Ref, r.now, faucet.Finish{Kind: faucet.FinishGiveUp})
 	require.True(t, res.Accepted)
 	require.EqualValues(t, 1, res.Removed)
-	require.Equal(t, faucet.DeliveryStatus{}, r.status(), "a give-up that faucet chose says nothing about the endpoint")
+	require.Equal(t, faucet.DeliveryStatus{}, r.status(), "a give-up that Superblink Events chose says nothing about the endpoint")
 
 	theirs := r.mustClaim(r.now)
 	require.Equal(t, r.events[1].ID, theirs.Ref.EventID)

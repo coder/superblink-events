@@ -134,7 +134,7 @@ func TestARealKubernetesTokenLogsInAndReadsEvents(t *testing.T) {
 		want   string
 	}{
 		"another service account's client": {"other-bot", nil, "the subject token is refused: it matches no trust rule of the client"},
-		"an actor":                         {"digest-bot", []string{"actor_token", subject, "actor_token_type", "urn:ietf:params:oauth:token-type:jwt"}, "faucet takes no actor_token"},
+		"an actor":                         {"digest-bot", []string{"actor_token", subject, "actor_token_type", "urn:ietf:params:oauth:token-type:jwt"}, "Superblink Events takes no actor_token"},
 		"an access token as the subject":   {"digest-bot", []string{"subject_token_type", "urn:ietf:params:oauth:token-type:access_token"}, "subject_token_type must be"},
 	} {
 		status, body := srv.exchange(t, c.client, subject, c.extra...)

@@ -190,7 +190,7 @@ describe('startup configuration', () => {
     {
       name: 'a missing FAUCET_PUBLIC_URL',
       env: { DATABASE_URL: WELL_FORMED_URL, GITHUB_WEBHOOK_SECRET: FAKE_SECRET },
-      message: "FAUCET_PUBLIC_URL is required: it is faucet's public URL, such as https://faucet.example.com or http://localhost:8080, where every caller logs in\n",
+      message: "FAUCET_PUBLIC_URL is required: it is Superblink Events' public URL, such as https://superblink-events.example.com or http://localhost:8080, where every caller logs in\n",
     },
     ...[
       ['repository_advisory', 'repository_advisory'],
@@ -200,12 +200,12 @@ describe('startup configuration', () => {
     ].map(([events, refused]) => ({
       name: `FAUCET_RAW_EVENTS=${events}`,
       env: { ...valid, FAUCET_RAW_EVENTS: events ?? '' },
-      message: `FAUCET_RAW_EVENTS: ${refused} is refused: GitHub shows its payload only to people with more than read access to a repository, and faucet checks only read access\n`,
+      message: `FAUCET_RAW_EVENTS: ${refused} is refused: GitHub shows its payload only to people with more than read access to a repository, and Superblink Events checks only read access\n`,
     })),
     {
       name: 'FAUCET_RAW_EVENTS with an event that faucet cannot offer raw',
       env: { ...valid, FAUCET_RAW_EVENTS: 'push,pull_request' },
-      message: 'FAUCET_RAW_EVENTS: "pull_request" is not a GitHub event that faucet can offer raw\n',
+      message: 'FAUCET_RAW_EVENTS: "pull_request" is not a GitHub event that Superblink Events can offer raw\n',
     },
   ];
   const printedNever = [

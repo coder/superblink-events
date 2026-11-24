@@ -92,7 +92,7 @@ func newNamesStub(t *testing.T) *namesStub {
 	t.Cleanup(func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		require.Zero(t, g.tokens, "faucet sends GitHub no token")
+		require.Zero(t, g.tokens, "Superblink Events sends GitHub no token")
 	})
 	g.url, g.client = srv.URL, srv.Client()
 	return g
@@ -181,7 +181,7 @@ func requireAcknowledgedWhileGitHubHangs(t *testing.T, handler http.Handler, clo
 	select {
 	case <-github.arrived:
 	case <-ctx.Done():
-		t.Fatal("faucet did not ask GitHub")
+		t.Fatal("Superblink Events did not ask GitHub")
 	}
 	_, w := clock.AdvanceNext()
 	w.MustWait(ctx)
@@ -189,7 +189,7 @@ func requireAcknowledgedWhileGitHubHangs(t *testing.T, handler http.Handler, clo
 	case rec := <-served:
 		require.Less(t, rec.Code, 300, rec.Body.String())
 	case <-ctx.Done():
-		t.Fatal("faucet kept waiting for GitHub past its deadline")
+		t.Fatal("Superblink Events kept waiting for GitHub past its deadline")
 	}
 }
 
@@ -250,7 +250,7 @@ func TestAReplayedDeliveryGivesAnAccountNoFormerLoginBack(t *testing.T) {
 			}
 			requireUnbound(t, store, "coder-legacy/tap")
 			requireNoOwner(t, store, "coder-legacy")
-			require.Equal(t, 2, github.askedFor(userPath(coderOrgID)), "faucet asks GitHub before it moves a login")
+			require.Equal(t, 2, github.askedFor(userPath(coderOrgID)), "Superblink Events asks GitHub before it moves a login")
 			if name != "GitHubNamesTheCurrentLogin" {
 				requireNoOwner(t, store, "coder")
 				requireUnbound(t, store, "coder/tap")
@@ -273,7 +273,7 @@ func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 	github := newNamesStub(t)
 	store, clock, handler := newRepositoryHarness(t, askingGitHub(github))
 	requireAcknowledged(t, handler, "push", "d-1", pushNaming(70, coderOrgID, "coder-legacy/tap"))
-	require.Zero(t, github.askedFor(userPath(coderOrgID)), "an account that faucet has not seen, under a login that no account holds, is added without asking")
+	require.Zero(t, github.askedFor(userPath(coderOrgID)), "an account that Superblink Events has not seen, under a login that no account holds, is added without asking")
 
 	github.answer(userPath(coderOrgID), rateLimited())
 	requireAcknowledged(t, handler, "push", "d-2", pushNaming(70, coderOrgID, "coder/tap"))
@@ -284,7 +284,7 @@ func TestAnAccountTakesTheLoginThatGitHubGivesIt(t *testing.T) {
 	github.answer(userPath(coderOrgID), recorded(t, "user_95932066.json"))
 	requireAcknowledged(t, handler, "push", "d-3", pushNaming(70, coderOrgID, "coder/tap"))
 	requireNoOwner(t, store, "coder")
-	require.Equal(t, 1, github.askedFor(userPath(coderOrgID)), "faucet asks about an account at most once a minute")
+	require.Equal(t, 1, github.askedFor(userPath(coderOrgID)), "Superblink Events asks about an account at most once a minute")
 
 	clock.Advance(time.Minute)
 	requireAcknowledged(t, handler, "push", "d-4", pushNaming(70, coderOrgID, "coder-next/tap"))
@@ -355,7 +355,7 @@ func TestAMissedRenameSentAgainLiftsNoQuarantine(t *testing.T) {
 		for _, name := range []string{"coder/r", "coder/s", "acme/s"} {
 			requireUnbound(t, store, name)
 		}
-		require.Equal(t, 2, github.askedFor(repoPath(5)), "faucet asks GitHub about each rename and transfer")
+		require.Equal(t, 2, github.askedFor(repoPath(5)), "Superblink Events asks GitHub about each rename and transfer")
 	})
 	t.Run("Public", func(t *testing.T) {
 		t.Parallel()
@@ -467,7 +467,7 @@ func TestAnOlderAnswerFromGitHubNeverReplacesANewerOne(t *testing.T) {
 	select {
 	case <-github.arrived:
 	case <-time.After(10 * time.Second):
-		t.Fatal("faucet did not ask GitHub")
+		t.Fatal("Superblink Events did not ask GitHub")
 	}
 
 	github.answer(repoPath(publicRepoID), githubRepository(t, publicRepoID, acmeID, "acme/superblink-events"))

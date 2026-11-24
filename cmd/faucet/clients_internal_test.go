@@ -75,7 +75,7 @@ func TestTheClientsCommandMakesListsAndDisablesClients(t *testing.T) {
 	triage, err := store.Client(ctx, "triage")
 	require.NoError(t, err)
 	require.Equal(t, faucet.AllScopes(), triage.Scopes, "a client holds every scope by default")
-	require.Equal(t, []string{"org:Coder#7", "all"}, triage.Grants, "an org grant names the account that holds the login, under the login that faucet holds")
+	require.Equal(t, []string{"org:Coder#7", "all"}, triage.Grants, "an org grant names the account that holds the login, under the login that Superblink Events holds")
 
 	out, _, err = clients(t, getenv, "list")
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestTheClientsCommandTakesAnOrgGrantWithTheAccountThatHoldsItsLogin(t *test
 	const resource = "https://faucet.example.com/github/mcp"
 
 	_, _, err := clients(t, getenv, "create", "-resource", resource, "-grant", "org:coder#8", "elsewhere")
-	require.ErrorContains(t, err, "org:coder#8 names account 8, and faucet's latest delivery gives coder to account 7")
+	require.ErrorContains(t, err, "org:coder#8 names account 8, and Superblink Events' latest delivery gives coder to account 7")
 	_, _, err = clients(t, getenv, "create", "-resource", resource, "-grant", "org:Coder#7", "triage")
 	require.NoError(t, err)
 	triage, err := store.Client(ctx, "triage")
@@ -162,7 +162,7 @@ func TestTheClientsCommandRefusesAnOrgGrantOfALoginThatFaucetHasNotSeen(t *testi
 	t.Parallel()
 	getenv, store := newClientsDatabase(t)
 	_, _, err := clients(t, getenv, "create", "-resource", "https://faucet.example.com/github/mcp", "-grant", "org:coder", "triage")
-	require.ErrorContains(t, err, "faucet has received no webhook delivery from coder or a repository of it, so it cannot tell which account org:coder names")
+	require.ErrorContains(t, err, "Superblink Events has received no webhook delivery from coder or a repository of it, so it cannot tell which account org:coder names")
 	_, err = store.Client(context.Background(), "triage")
 	require.ErrorIs(t, err, oauth.ErrUnknownClient, "no client is made")
 }
@@ -229,11 +229,11 @@ func TestTheClientsCommandTakesThePublicURLFromVercelAsTheServerDoes(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "https://events.example.com/github/mcp", pinned.Resource)
 	_, _, err = clients(t, getenv, "create", "-resource", "https://events.example.com/mcp", "-grant", "repo:coder/faucet", "old-path")
-	require.ErrorContains(t, err, "-resource must be faucet's public URL and /github/mcp", "the shape is still checked")
+	require.ErrorContains(t, err, "-resource must be Superblink Events' public URL and /github/mcp", "the shape is still checked")
 
 	vercel[envVercelEnv] = "preview"
 	_, _, err = clients(t, getenv, "create", "-grant", "repo:coder/faucet", "preview")
-	require.ErrorContains(t, err, "-resource must be faucet's public URL", "a preview derives nothing, as the server does not")
+	require.ErrorContains(t, err, "-resource must be Superblink Events' public URL", "a preview derives nothing, as the server does not")
 }
 
 func TestTheClientsCommandNeedsACurrentDatabase(t *testing.T) {
@@ -471,7 +471,7 @@ func TestTheClientsCommandRefusesATrustRuleThatCannotWork(t *testing.T) {
 		"no production pin":     {trustVercel("digest-bot", vercelPins[:2]...), "a trust rule for https://oidc.vercel.com/codercom must pin environment=production: a preview deployment runs any branch"},
 		"a preview":             {trustVercel("digest-bot", vercelPins[0], vercelPins[1], "environment=preview"), "must pin environment=production"},
 		"no team":               {trustVercel("digest-bot", vercelPins[1:]...), "must pin owner_id: Vercel signs the tokens of every team with the same keys"},
-		"every team's issuer":   {[]string{"trust", "digest-bot", "-issuer", "https://oidc.vercel.com", "-claim", vercelPins[0]}, "faucet never trusts https://oidc.vercel.com, which every Vercel team shares"},
+		"every team's issuer":   {[]string{"trust", "digest-bot", "-issuer", "https://oidc.vercel.com", "-claim", vercelPins[0]}, "Superblink Events never trusts https://oidc.vercel.com, which every Vercel team shares"},
 		"no sub":                {[]string{"trust", "digest-bot", "-issuer", clusterIssuer, "-claim", "kubernetes.io/namespace=apps"}, "a trust rule for https://k8s.wi-test.invalid must pin sub"},
 		"an http issuer":        {[]string{"trust", "digest-bot", "-issuer", "http://k8s.wi-test.invalid", "-claim", "sub=" + clusterAccount}, "a trust rule's issuer must be an https URL"},
 		"no issuer":             {[]string{"trust", "digest-bot", "-claim", "sub=" + clusterAccount}, "a trust rule's issuer must be an https URL"},
@@ -627,7 +627,7 @@ func TestTheClientsCommandUpdatesAClientInPlace(t *testing.T) {
 
 	out, _, err = clients(t, getenv, "update", "superblink", "-scope", "events:read")
 	require.NoError(t, err)
-	require.Equal(t, "superblink holds repo:coder/faucet, org:Coder#7, with the scopes events:read.\nIt holds no events:subscribe, so faucet deleted its 0 subscriptions.\n", out)
+	require.Equal(t, "superblink holds repo:coder/faucet, org:Coder#7, with the scopes events:read.\nIt holds no events:subscribe, so Superblink Events deleted its 0 subscriptions.\n", out)
 
 	out, _, err = clients(t, getenv, "update", "superblink", "-scope", "events:subscribe", "-grant", "all")
 	require.NoError(t, err)

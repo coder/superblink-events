@@ -853,7 +853,7 @@ func TestWaitRefusesAWaitBeyondTheLoginsLimitAndAdmitsOneAgainWhenOneEnds(t *tes
 func TestAnAccessDenialThatSaysWhyReachesTheCaller(t *testing.T) {
 	t.Parallel()
 
-	why := xerrors.Errorf("faucet has seen no delivery from %s yet: %w", testRepo, faucet.ErrNoAccess)
+	why := xerrors.Errorf("Superblink Events has seen no delivery from %s yet: %w", testRepo, faucet.ErrNoAccess)
 	wait := newWaitHarness(t)
 	wait.authz.err = why
 	require.Equal(t, why.Error(), wait.call(args("repo", testRepo, "types", allTypes, "cursor", "v2.0")).failure(t))
@@ -888,13 +888,13 @@ func TestAnAccessDenialIsLoggedOnOneLine(t *testing.T) {
 	t.Parallel()
 
 	denied := newWaitHarness(t)
-	denied.authz.err = xerrors.Errorf("faucet has seen no delivery from %s yet: %w", testRepo, faucet.ErrNoAccess)
+	denied.authz.err = xerrors.Errorf("Superblink Events has seen no delivery from %s yet: %w", testRepo, faucet.ErrNoAccess)
 	denied.call(args("repo", testRepo, "types", allTypes, "cursor", "v2.0")).failure(t)
 	logs := denied.logs.String()
 	lines := logLines(logs, "wait denied")
 	require.Len(t, lines, 1, logs)
 	require.Contains(t, lines[0], "[info]")
-	require.Contains(t, lines[0], "faucet has seen no delivery from "+testRepo+" yet")
+	require.Contains(t, lines[0], "Superblink Events has seen no delivery from "+testRepo+" yet")
 	require.NotContains(t, logs, ".go:", "the log holds no stack frame")
 	require.Equal(t, 1, strings.Count(strings.TrimSpace(logs), "\n")+1, "the denial is the one line logged: %s", logs)
 

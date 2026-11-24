@@ -47,7 +47,7 @@ var errClientDocument = xerrors.New("the client ID metadata document is refused"
 
 // errDocumentUnreachable is the error of a document that faucet could not
 // fetch. An error that wraps it holds the cause, which is for the log only.
-var errDocumentUnreachable = xerrors.New("faucet could not fetch the client's document")
+var errDocumentUnreachable = xerrors.New("Superblink Events could not fetch the client's document")
 
 var (
 	// refusedSchemes are the schemes that a redirect URI must not use: a
@@ -224,7 +224,7 @@ func parseClientDocument(clientID string, body []byte) (clientDocument, error) {
 	case len(raw.ClientName) > maxClientNameBytes || strings.IndexFunc(raw.ClientName, unprintable) >= 0:
 		return clientDocument{}, xerrors.Errorf("the document's client_name must be at most %d bytes with no control or format character", maxClientNameBytes)
 	case raw.AuthMethod != nil && *raw.AuthMethod != "none":
-		return clientDocument{}, xerrors.New("the document's token_endpoint_auth_method must be none: faucet takes public clients only")
+		return clientDocument{}, xerrors.New("the document's token_endpoint_auth_method must be none: Superblink Events takes public clients only")
 	case raw.Secret != nil || raw.SecretExpiresAt != nil:
 		return clientDocument{}, xerrors.New("the document must hold no client_secret: anyone can read it")
 	}

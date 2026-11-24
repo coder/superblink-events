@@ -36,10 +36,10 @@ const (
 var (
 	// errAskedRecently says that faucet asked GitHub about the account less
 	// than accountAskInterval ago.
-	errAskedRecently = xerrors.New("faucet asked GitHub about the account less than a minute ago")
+	errAskedRecently = xerrors.New("Superblink Events asked GitHub about the account less than a minute ago")
 	// errNoLookupSlot says that the process ran maxConcurrentLookups lookups
 	// for the whole budget of the delivery.
-	errNoLookupSlot = xerrors.New("faucet asked GitHub as often at once as it may for the whole time it may wait")
+	errNoLookupSlot = xerrors.New("Superblink Events asked GitHub as often at once as it may for the whole time it may wait")
 	// errGitHubNotFound is GitHub's 404: no such account, or a repository
 	// that is private or deleted, which GitHub does not tell apart for a
 	// client with no token.

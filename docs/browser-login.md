@@ -8,7 +8,7 @@ For this way in, Superblink Events keeps the user's GitHub App token. It seals t
 
 1. Make a GitHub App for Superblink Events, under the organization's **Settings**, **Developer settings**, **GitHub Apps**:
    - **Callback URL:** the value of `FAUCET_PUBLIC_URL` followed by `/oauth/github/callback`.
-   - **Expire user authorization tokens:** on. Superblink Events keeps no token that never expires. With this off, every login stops at a page that says "faucet cannot keep this login", and the log names the setting.
+   - **Expire user authorization tokens:** on. Superblink Events keeps no token that never expires. With this off, every login stops at a page that says "Superblink Events cannot keep this login", and the log names the setting.
    - **Repository permissions:** read-only. Metadata is enough, because Superblink Events asks GitHub only whether the user can read a repository.
    - **Webhook:** off. Events still come from the hook of the [quick start](../README.md#quick-start). Superblink Events uses no installation token and no private key of the App.
 2. Make a client secret for the App.

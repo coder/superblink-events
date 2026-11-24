@@ -235,7 +235,7 @@ func TestAnOrgGrantCoversTheRepositoriesOfItsOwner(t *testing.T) {
 	res, err = call(ctx, session, "coder/new-repo", map[string]any{"timeout_s": 1})
 	require.NoError(t, err)
 	require.True(t, res.IsError)
-	require.Contains(t, toolText(t, res), "faucet has received no webhook delivery from coder/new-repo yet")
+	require.Contains(t, toolText(t, res), "Superblink Events has received no webhook delivery from coder/new-repo yet")
 }
 
 // A service polls a raw event of an organization over the server as run()
@@ -397,7 +397,7 @@ func TestAnOrgGrantNeverSnapsBackToTheAccountThatGaveItsLoginUp(t *testing.T) {
 	_, err = srv.svc.DeliverDue(ctx)
 	require.NoError(t, err)
 	require.Empty(t, hooks.runsOf("/taker"), "the renewed subscription gets no event of that account")
-	require.Contains(t, waitError(ctx, t, session, map[string]any{"repo": "old-coder/tool"}), "faucet has received no webhook delivery from old-coder/tool yet")
+	require.Contains(t, waitError(ctx, t, session, map[string]any{"repo": "old-coder/tool"}), "Superblink Events has received no webhook delivery from old-coder/tool yet")
 }
 
 // GitHub sends no repository event when it renames an organization, so the
@@ -429,5 +429,5 @@ func TestARepositoryOfARenamedOrganizationIsGrantedAndRenamedUnderItsNewLogin(t 
 	require.NoError(t, err)
 	srv.postAnswered(t, "repository", "renamed-1", renamed, http.StatusAccepted)
 	waitFor(ctx, t, repo, map[string]any{"repo": "coder/tap"})
-	require.Contains(t, waitError(ctx, t, repo, map[string]any{"repo": "coder/faucet"}), "faucet has received no webhook delivery from coder/faucet yet")
+	require.Contains(t, waitError(ctx, t, repo, map[string]any{"repo": "coder/faucet"}), "Superblink Events has received no webhook delivery from coder/faucet yet")
 }

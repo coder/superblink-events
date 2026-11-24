@@ -572,7 +572,7 @@ func TestAConsentThatTheBrowserOfTheLoginDidNotSendIsRefusedAndStoresNothing(t *
 		cookies func(own, other loginConsent) []*http.Cookie
 	}{
 		{name: "the victim's browser posts only the request id", origins: []string{loginForeign}, form: onlyID, cookies: noCookie},
-		{name: "only the request id, with faucet's Origin", origins: []string{h.issuer}, form: onlyID, cookies: noCookie},
+		{name: "only the request id, with Superblink Events' Origin", origins: []string{h.issuer}, form: onlyID, cookies: noCookie},
 		{name: "the victim's browser posts the request id and the form token", origins: []string{h.issuer}, form: ownForm, cookies: noCookie},
 		{name: "a foreign Origin", origins: []string{loginForeign}, form: ownForm, cookies: ownCookie},
 		{name: "Origin null", origins: []string{"null"}, form: ownForm, cookies: ownCookie},

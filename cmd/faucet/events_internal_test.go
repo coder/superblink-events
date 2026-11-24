@@ -226,7 +226,7 @@ func TestMCPTakesOneMessagePerRequest(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode, "version %q: %s", version, body)
-		require.JSONEq(t, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"faucet takes one JSON-RPC message per request, as a JSON object"}}`, string(body))
+		require.JSONEq(t, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Superblink Events takes one JSON-RPC message per request, as a JSON object"}}`, string(body))
 	}
 	require.Equal(t, polls, srv.store.pollCount(), "a refused batch reads no events")
 }

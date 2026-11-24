@@ -87,7 +87,7 @@ func TestAServiceReadsTheRepositoriesItsGrantsName(t *testing.T) {
 
 		_, err = check(ctx, p, "coder/new")
 		require.ErrorIs(t, err, faucet.ErrNoAccess, "a granted repository that no delivery named yet")
-		require.ErrorContains(t, err, "faucet has received no webhook delivery from coder/new yet")
+		require.ErrorContains(t, err, "Superblink Events has received no webhook delivery from coder/new yet")
 
 		_, err = check(ctx, p, "coder")
 		require.Error(t, err)
@@ -130,10 +130,10 @@ func TestAnOrgGrantCoversTheRepositoriesOfTheOwnersAccount(t *testing.T) {
 		for _, repo := range []string{"octo/repo", "octo/unseen"} {
 			_, err := check(ctx, p, repo)
 			require.ErrorIs(t, err, faucet.ErrNoAccess, repo)
-			require.ErrorContains(t, err, "no grant of this service names "+repo, "the answer does not tell which repositories of other owners faucet has seen")
+			require.ErrorContains(t, err, "no grant of this service names "+repo, "the answer does not tell which repositories of other owners Superblink Events has seen")
 		}
 		_, err := check(ctx, p, "coder/new")
-		require.ErrorContains(t, err, "faucet has received no webhook delivery from coder/new yet")
+		require.ErrorContains(t, err, "Superblink Events has received no webhook delivery from coder/new yet")
 	}
 	for _, check := range []func(context.Context, faucet.Principal, string) (int64, error){access.OwnerID, access.OwnerIDFresh} {
 		id, err := check(ctx, p, "coder")
@@ -168,7 +168,7 @@ func TestTheAllGrantCoversEveryRepositoryAndOwnerThatADeliveryNamed(t *testing.T
 
 	_, err = access.OwnerIDFresh(ctx, p, "new-org")
 	require.ErrorIs(t, err, faucet.ErrNoAccess)
-	require.EqualError(t, err, "faucet has received no webhook delivery from a repository of new-org yet, so it cannot tell which owner the grant names; "+
+	require.EqualError(t, err, "Superblink Events has received no webhook delivery from a repository of new-org yet, so it cannot tell which owner the grant names; "+
 		"it can once GitHub sends one: repository not found or not accessible")
 }
 

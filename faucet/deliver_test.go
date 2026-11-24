@@ -987,7 +987,7 @@ func TestSubscribeReportsTheDeliveryStatusOfARefreshedSubscription(t *testing.T)
 	failing := d.refreshStatus(ep)
 	require.Equal(t, "http_5xx", *failing.LastError)
 	require.Equal(t, failedAt.UTC().Format(time.RFC3339), failing.FailedSince)
-	require.True(t, failing.Active, "faucet does not suspend")
+	require.True(t, failing.Active, "Superblink Events does not suspend")
 
 	d.advance(15 * time.Second)
 	deliveredAt := d.clock.Now()

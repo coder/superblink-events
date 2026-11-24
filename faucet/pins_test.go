@@ -100,7 +100,7 @@ func TestWebhookIDIsKeyedByTheOperatorsKeyApartFromTheSealingKey(t *testing.T) {
 	subscription := d.rows()[0].KeyHash
 
 	require.Equal(t, messageIDOf(hmacOf(testWebhookKey, "faucet webhook-id v1"), subscription, event.ID), got,
-		"a second faucet that holds the same key, such as a failover, gives the same webhook-id")
+		"a second Superblink Events that holds the same key, such as a failover, gives the same webhook-id")
 	require.NotEqual(t, messageIDOf(testWebhookKey, subscription, event.ID), got, "the key that seals secrets does not make the ids")
 	require.NotEqual(t, messageIDOf(hmacOf(testWebhookKey, "faucet secret nonce v1"), subscription, event.ID), got,
 		"neither does the key that derives the nonces of sealed secrets")
@@ -166,7 +166,7 @@ func TestHandshakeOfARenewalThatRotatesIsSignedWithTheNewSecretOnly(t *testing.T
 	newer := newSecret(t, 32)
 	restarted.subscribe(subscribeTo(ep.args, d.rcv.url(ep.path), newer))
 
-	require.Len(t, restarted.verifier.requests, 1, "a faucet that has not verified the URL yet does it on the renewal")
+	require.Len(t, restarted.verifier.requests, 1, "a Superblink Events server that has not verified the URL yet does it on the renewal")
 	body := []byte(`{"type":"verification"}`)
 	headers, err := restarted.verifier.requests[0].Sign("msg_probe", restarted.clock.Now(), body)
 	require.NoError(t, err)

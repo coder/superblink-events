@@ -77,7 +77,7 @@ func checkEventName(body []byte, header string) *rpcFailure {
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(body, &fields) != nil {
-		return &rpcFailure{code: jsonrpc.CodeInvalidRequest, message: "faucet takes one JSON-RPC message per request, as a JSON object"}
+		return &rpcFailure{code: jsonrpc.CodeInvalidRequest, message: "Superblink Events takes one JSON-RPC message per request, as a JSON object"}
 	}
 	if hasRepeatedKey(body) {
 		return &rpcFailure{fields["id"], jsonrpc.CodeInvalidRequest, "request repeats a field"}

@@ -55,7 +55,7 @@ var pageCSP = "default-src 'none'; script-src 'sha256-" + base64.StdEncoding.Enc
 // scopeDescriptions say in plain words what each scope lets a client do.
 var scopeDescriptions = map[faucet.Scope]string{
 	"events:read":      "wait for and read the GitHub events (CI results, reviews, comments) of the repositories that you can see",
-	"events:subscribe": "have faucet send those events to a web address that the app chooses",
+	"events:subscribe": "have Superblink Events send those events to a web address that the app chooses",
 }
 
 // setLoginHeaders sets the headers of every answer of the browser login. No
@@ -103,7 +103,7 @@ func newConsentPage(r AuthRequest, sealed, formToken string) consentPage {
 	for _, s := range r.Scopes {
 		description, ok := scopeDescriptions[s]
 		if !ok {
-			description = "a permission that faucet has not described"
+			description = "a permission that Superblink Events has not described"
 		}
 		p.Scopes = append(p.Scopes, consentScope{Name: string(s), Description: description})
 	}
@@ -125,7 +125,7 @@ var pages = template.Must(template.New("").Parse(`
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.}} · faucet</title>
+<title>{{.}} · Superblink Events</title>
 <style>
 :root { color-scheme: light dark; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #ffffff; --bg: #f6f8fa; --button: #1f883d; }
 @media (prefers-color-scheme: dark) { :root { --fg: #f0f6fc; --muted: #9198a1; --line: #3d444d; --card: #151b23; --bg: #0d1117; --button: #238636; } }
@@ -155,12 +155,12 @@ button:disabled { opacity: .5; cursor: default; }
 {{end}}
 
 {{define "consent"}}{{template "top" "Log in"}}
-<p class="eyebrow">faucet login</p>
+<p class="eyebrow">Superblink Events login</p>
 <h1>{{.ClientHost}}</h1>
-{{if .ClientName}}<p class="says">says it is <strong>{{.ClientName}}</strong>. faucet has not checked this name.</p>
+{{if .ClientName}}<p class="says">says it is <strong>{{.ClientName}}</strong>. Superblink Events has not checked this name.</p>
 {{else}}<p class="says">gives no name.</p>
 {{end}}
-<p>This app asks to use faucet in your name.</p>
+<p>This app asks to use Superblink Events in your name.</p>
 <dl>
 <dt>Endpoint</dt>
 <dd><code>{{.Resource}}</code></dd>
@@ -173,7 +173,7 @@ button:disabled { opacity: .5; cursor: default; }
 <dt>Client ID</dt>
 <dd><code>{{.ClientID}}</code></dd>
 </dl>
-<p>Continue takes you to GitHub to log in. faucet keeps the GitHub token that it gets there for you, sealed, and gives this app only its own faucet token, which lasts {{.TokenMinutes}} minutes at a time. The app never sees your GitHub token.</p>
+<p>Continue takes you to GitHub to log in. Superblink Events keeps the GitHub token that it gets there for you, sealed, and gives this app only its own Superblink Events token, which lasts {{.TokenMinutes}} minutes at a time. The app never sees your GitHub token.</p>
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="request" value="{{.RequestID}}">
 <input type="hidden" name="login" value="{{.Request}}">
@@ -186,7 +186,7 @@ button:disabled { opacity: .5; cursor: default; }
 {{template "bottom"}}{{end}}
 
 {{define "error"}}{{template "top" .Title}}
-<p class="eyebrow">faucet login</p>
+<p class="eyebrow">Superblink Events login</p>
 <h1>{{.Title}}</h1>
 <p>{{.Message}}</p>
 {{if .Detail}}<p class="note">Details for the app's developer: {{.Detail}}</p>
@@ -198,7 +198,7 @@ button:disabled { opacity: .5; cursor: default; }
 func writePage(w http.ResponseWriter, status int, name string, data any) {
 	var body bytes.Buffer
 	if err := pages.ExecuteTemplate(&body, name, data); err != nil {
-		http.Error(w, "faucet could not show this page", http.StatusInternalServerError)
+		http.Error(w, "Superblink Events could not show this page", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

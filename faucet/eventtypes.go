@@ -351,7 +351,7 @@ func (a pollArguments) withinLimits() bool {
 var (
 	repoArgument  = map[string]any{"type": "string", "description": "The repository, written owner/name. Name one of repo, owner and all."}
 	ownerArgument = map[string]any{"type": "string", "description": "Every repository of this owner, a GitHub user or organization login. For service clients whose grants cover the owner."}
-	allArgument   = map[string]any{"type": "boolean", "const": true, "description": "Every repository that faucet receives events from. For service clients granted all."}
+	allArgument   = map[string]any{"type": "boolean", "const": true, "description": "Every repository that Superblink Events receives events from. For service clients granted all."}
 	reposArgument = map[string]any{
 		"type": "array", "minItems": 1, "maxItems": maxListItems, "items": map[string]any{"type": "string"},
 		"description": "With owner or all, only the events of these repositories, each written owner/name.",

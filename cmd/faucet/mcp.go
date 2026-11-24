@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	mcpServerName    = "faucet"
+	mcpServerName    = "superblink-events"
+	mcpServerTitle   = "Superblink Events"
 	mcpServerVersion = "0.1.0"
 	maxTokenBytes    = 1024
 )
@@ -34,7 +35,7 @@ func principalFrom(ctx context.Context) (faucet.Principal, error) {
 }
 
 func newMCPHandler(svc *faucet.Service) http.Handler {
-	srv := mcp.NewServer(&mcp.Implementation{Name: mcpServerName, Version: mcpServerVersion}, &mcp.ServerOptions{
+	srv := mcp.NewServer(&mcp.Implementation{Name: mcpServerName, Title: mcpServerTitle, Version: mcpServerVersion}, &mcp.ServerOptions{
 		Capabilities: faucet.ServerCapabilities(),
 	})
 	svc.Register(srv)
@@ -120,13 +121,13 @@ func parseOrigin(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	switch {
 	case err != nil || u.Host == "" || u.Hostname() == "":
-		return nil, xerrors.New("faucet's public URL must be an absolute URL with a host")
+		return nil, xerrors.New("Superblink Events' public URL must be an absolute URL with a host")
 	case u.User != nil || u.Opaque != "" || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
-		return nil, xerrors.New("faucet's public URL must have no user info, path, trailing slash, query or fragment")
+		return nil, xerrors.New("Superblink Events' public URL must have no user info, path, trailing slash, query or fragment")
 	case u.Scheme != "https" && (u.Scheme != "http" || !isLoopback(u.Hostname())):
-		return nil, xerrors.New("faucet's public URL must use https, or http on a loopback host")
+		return nil, xerrors.New("Superblink Events' public URL must use https, or http on a loopback host")
 	case u.Hostname() != strings.ToLower(u.Hostname()) || strings.HasSuffix(u.Hostname(), "."):
-		return nil, xerrors.New("faucet's public URL must have a lower-case host with no trailing dot")
+		return nil, xerrors.New("Superblink Events' public URL must have a lower-case host with no trailing dot")
 	}
 	if err := canonicalPort(u); err != nil {
 		return nil, err
@@ -140,16 +141,16 @@ func canonicalPort(u *url.URL) error {
 	port := u.Port()
 	if port == "" {
 		if strings.HasSuffix(u.Host, ":") {
-			return xerrors.New("faucet's public URL must not end its host with an empty port")
+			return xerrors.New("Superblink Events' public URL must not end its host with an empty port")
 		}
 		return nil
 	}
 	n, err := strconv.Atoi(port)
 	switch {
 	case err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port:
-		return xerrors.New("faucet's public URL must have a port from 1 to 65535, written without a leading zero")
+		return xerrors.New("Superblink Events' public URL must have a port from 1 to 65535, written without a leading zero")
 	case (u.Scheme == "https" && n == 443) || (u.Scheme == "http" && n == 80):
-		return xerrors.Errorf("faucet's public URL must leave out the default port %d", n)
+		return xerrors.Errorf("Superblink Events' public URL must leave out the default port %d", n)
 	}
 	return nil
 }
@@ -182,10 +183,10 @@ func requireBearer(b bearers, path string, logger slog.Logger, next http.Handler
 		switch {
 		case xerrors.Is(err, faucet.ErrInvalidToken):
 			// One line of text: slog.Error would add the error's stack frames.
-			logger.Debug(r.Context(), "faucet token rejected", slog.F("reason", err.Error()))
+			logger.Debug(r.Context(), "Superblink Events token rejected", slog.F("reason", err.Error()))
 			unauthorized(w, challenge)
 		case err != nil:
-			logger.Warn(r.Context(), "could not check the faucet token", slog.Error(err))
+			logger.Warn(r.Context(), "could not check the Superblink Events token", slog.Error(err))
 			http.Error(w, "could not check the token", http.StatusInternalServerError)
 		default:
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, p)))
