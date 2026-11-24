@@ -48,7 +48,7 @@ describe('service accounts', () => {
       const early = await started.serviceAgent('/github/mcp', 'ci-watcher', secret, { repo, types: ['ci.run_completed'] });
       expect(early.code, early.stderr).toBe(0);
       expect(waited(early.stdout).isError, 'no delivery has named the repository yet').toBe(true);
-      expect(waited(early.stdout).content?.[0]?.text).toContain(`faucet has received no webhook delivery from ${repo} yet`);
+      expect(waited(early.stdout).content?.[0]?.text).toContain(`Superblink Events has received no webhook delivery from ${repo} yet`);
 
       await deliverRun(started, repoId);
       const reply = await started.serviceAgent('/github/mcp', 'ci-watcher', secret, { repo, types: ['ci.run_completed'] });
@@ -156,7 +156,7 @@ describe('service accounts', () => {
       expect(refused.headers.get('www-authenticate'), 'the client sends no Authorization header').toBeNull();
       expect(JSON.parse(refused.body), 'the answer tells the caller nothing about the client').toEqual({
         error: 'invalid_client',
-        error_description: "the client takes no such subject token: check client_id and the token, and faucet's log for the reason",
+        error_description: "the client takes no such subject token: check client_id and the token, and Superblink Events' log for the reason",
       });
       const unknown = await exchange('no-such-agent');
       expect([unknown.status, unknown.body], 'an unknown client gets the same answer').toEqual([refused.status, refused.body]);
@@ -182,7 +182,7 @@ describe('service accounts', () => {
 
       const early = await poll();
       expect(early.error?.code, early.body).toBe(-32024);
-      expect(early.error?.message).toContain(`faucet has received no webhook delivery from ${repo} yet`);
+      expect(early.error?.message).toContain(`Superblink Events has received no webhook delivery from ${repo} yet`);
 
       const unwanted = await push();
       expect(unwanted.status).toBe(202);

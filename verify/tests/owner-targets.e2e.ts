@@ -4,7 +4,7 @@ import { describe, expect, newRepoId, test } from './support';
 import { EVENT, delivery, newMarker, subscribe, subscribed, type Params } from './subscriptions';
 
 const SERVICE_ONLY = 'owner and all targets are for service clients; name one repository with repo';
-const UNSEEN_LOGIN = 'faucet has received no webhook delivery from verify or a repository of it, so it cannot tell which account org:verify names';
+const UNSEEN_LOGIN = 'Superblink Events has received no webhook delivery from verify or a repository of it, so it cannot tell which account org:verify names';
 const BOTH_SCOPES = 'events:read,events:subscribe';
 
 function paramsAt(at: Endpoint, args: Params): Params {
