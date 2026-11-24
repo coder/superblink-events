@@ -217,9 +217,7 @@ func TestMigrateLeavesHostMigrationsTableAlone(t *testing.T) {
 	var hostVersion int64
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT version FROM schema_migrations`).Scan(&hostVersion))
 	require.EqualValues(t, 400, hostVersion)
-	var faucetVersion int64
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT version FROM `+pq.QuoteIdentifier(pgstore.MigrationsTable)).Scan(&faucetVersion))
-	require.EqualValues(t, 20, faucetVersion)
+	require.NoError(t, pgstore.CheckSchema(ctx, db), "Migrate takes faucet's own table to the newest embedded migration")
 }
 
 // The raw events migration adds tables of its own and one index. A down
