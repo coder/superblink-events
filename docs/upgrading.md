@@ -4,7 +4,7 @@ The server applies every schema change at start (on Vercel, in production only, 
 
 ## To Superblink Events in the server's output
 
-This came in [#94](https://github.com/coder/superblink-events/pull/94). It needs no migration, and settings, routes, tokens and sealed values do not change. What the server shows and sends says Superblink Events instead of Superblink Events:
+This came in [#94](https://github.com/coder/superblink-events/pull/94). It needs no migration, and settings, routes, tokens and sealed values do not change. What the server shows and sends says Superblink Events where it said faucet:
 
 - Webhook deliveries send `User-Agent: superblink-events-webhook`, and handshakes `superblink-events-webhook-verification`. A receiver that matches the old value must change.
 - Calls to GitHub send `User-Agent: coder-superblink-events`.
