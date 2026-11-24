@@ -18,7 +18,7 @@ import (
 // go-sdk v1.8.0 detects how a client authenticates: its first token request
 // of a public client carries HTTP Basic credentials with an empty password
 // and no client_id in the form. A server that redeemed the code before it
-// looked at the client burned the code on that request (R6).
+// looked at the client burned the code on that request.
 func TestAGoSDKClientRedeemsItsCodeWithBasicCredentialsInOneRequest(t *testing.T) {
 	t.Parallel()
 	h := newGrantHarness(t, newFakeStore())
@@ -57,8 +57,7 @@ func TestAGoSDKClientRedeemsItsCodeWithBasicCredentialsInOneRequest(t *testing.T
 }
 
 // A token request that fails the client check or the proof check changes
-// nothing, so the code still works for the client that then sends it right
-// (R6).
+// nothing, so the code still works for the client that then sends it right.
 func TestACodeStaysRedeemableAfterARequestThatFailsTheClientOrTheProofCheck(t *testing.T) {
 	t.Parallel()
 	h := newGrantHarness(t, newFakeStore())

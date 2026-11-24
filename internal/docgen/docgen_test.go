@@ -251,14 +251,14 @@ func TestCheckNames(t *testing.T) {
 		"cmd/faucet/main.go": "package main\n\nimport \"os\"\n\nconst (\n\tenvKey = \"FAUCET_KEY\"\n\tliteral = \"FAUCET_LITERAL\"\n)\n\n" +
 			"func load(getenv func(string) string) {\n\tgetenv(envKey)\n\tgetenv(\"DATABASE_URL\")\n\tos.Getenv(\"PORT\")\n\tos.LookupEnv(\"CRON_SECRET\")\n}\n\n" +
 			"func routes(r chi.Router) {\n\tr.Get(\"/cron/purge\", nil)\n\tr.Method(http.MethodPost, \"/webhook/github\", nil)\n\tr.Handle(\"/mcp\", nil)\n}\n",
-		"cmd/faucet/e2e.go":                "//go:build faucet_e2e\n\npackage main\n\nfunc e2e(r chi.Router) { r.Get(\"/e2e\", nil) }\n",
-		"faucet/db_test.go":                "package faucet_test\n\nimport \"os\"\n\nvar dbVar = os.Getenv(\"FAUCET_TEST_ONLY\")\n",
-		"faucet/internal/pgtest/pgtest.go": "package pgtest\n\nimport \"os\"\n\nfunc URL() string { return os.Getenv(\"FAUCET_TEST_DATABASE_URL\") }\n",
-		"verify/go.mod":                    "module github.com/coder/superblink-events/verify\n",
-		"verify/run.go":                    "package verify\n\nimport \"os\"\n\nvar v = os.Getenv(\"FAUCET_VERIFY_ONLY\")\n",
-		"docs/a.md":                        "# A\n\n## Second part\n\n## Twice\n\n## Twice\n\n```sh\n## Not a heading\n```\n",
-		"docs/images/map.png":              "",
-		"faucet/redelivery/x.go":           "package redelivery\n",
+		"cmd/faucet/e2e.go":         "//go:build faucet_e2e\n\npackage main\n\nfunc e2e(r chi.Router) { r.Get(\"/e2e\", nil) }\n",
+		"faucet/db_test.go":         "package faucet_test\n\nimport \"os\"\n\nvar dbVar = os.Getenv(\"FAUCET_TEST_ONLY\")\n",
+		"internal/pgtest/pgtest.go": "package pgtest\n\nimport \"os\"\n\nfunc URL() string { return os.Getenv(\"FAUCET_TEST_DATABASE_URL\") }\n",
+		"verify/go.mod":             "module github.com/coder/superblink-events/verify\n",
+		"verify/run.go":             "package verify\n\nimport \"os\"\n\nvar v = os.Getenv(\"FAUCET_VERIFY_ONLY\")\n",
+		"docs/a.md":                 "# A\n\n## Second part\n\n## Twice\n\n## Twice\n\n```sh\n## Not a heading\n```\n",
+		"docs/images/map.png":       "",
+		"faucet/redelivery/x.go":    "package redelivery\n",
 	}
 	cases := []struct {
 		name   string
@@ -337,17 +337,17 @@ func TestEnvReadsOutsideCmdFaucet(t *testing.T) {
 		return "package " + pkg + "\n\nimport \"os\"\n\nvar _ = os.Getenv(\"" + name + "\")\n"
 	}
 	_, err := envReads(mapFS(map[string]string{
-		"faucet/internal/pgtest/pgtest.go": read("pgtest", "CI"),
-		"cmd/faucet/main.go":               read("main", "PORT"),
+		"internal/pgtest/pgtest.go": read("pgtest", "FAUCET_TEST_DATABASE_URL"),
+		"cmd/faucet/main.go":        read("main", "PORT"),
 	}))
 	if err != nil {
 		t.Fatalf("got %v, want the listed reads to pass", err)
 	}
 	_, err = envReads(mapFS(map[string]string{
-		"faucet/other.go":                  read("faucet", "FAUCET_OTHER"),
-		"faucet/internal/pgtest/pgtest.go": read("pgtest", "FAUCET_NEW"),
+		"faucet/other.go":           read("faucet", "FAUCET_OTHER"),
+		"internal/pgtest/pgtest.go": read("pgtest", "FAUCET_NEW"),
 	}))
-	for _, want := range []string{"faucet reads FAUCET_OTHER", "faucet/internal/pgtest reads FAUCET_NEW"} {
+	for _, want := range []string{"faucet reads FAUCET_OTHER", "internal/pgtest reads FAUCET_NEW"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("error %v does not say %q", err, want)
 		}

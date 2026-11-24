@@ -269,7 +269,7 @@ func TestASessionTrustsOnlyTheChecksMadeSinceItsRefresh(t *testing.T) {
 	}
 }
 
-// Every renewal checks access again at GitHub (R3), with a fresh check at
+// Every renewal checks access again at GitHub, with a fresh check at
 // hand, and records the answer: a pass for the next check, a denial by
 // taking the check away.
 func TestARenewalAlwaysAsksGitHub(t *testing.T) {

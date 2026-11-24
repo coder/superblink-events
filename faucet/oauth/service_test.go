@@ -172,7 +172,7 @@ func TestTheAllGrantCoversEveryRepositoryAndOwnerThatADeliveryNamed(t *testing.T
 		"it can once GitHub sends one: repository not found or not accessible")
 }
 
-// A renewal checks access again at the source (R3): for a service, the
+// A renewal checks access again at the source: for a service, the
 // client as the store holds it now.
 func TestAFreshCheckReadsTheClientAgain(t *testing.T) {
 	t.Parallel()

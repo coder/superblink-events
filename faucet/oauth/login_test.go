@@ -552,7 +552,7 @@ func (h *loginHarness) loginRequireCode(t *testing.T, a loginAnswer, c loginClie
 	return q.Get("code")
 }
 
-// R1: the attacker's server starts a login for the attacker's client, and a
+// The attacker's server starts a login for the attacker's client, and a
 // page of the attacker makes the victim's browser post the consent form. The
 // victim authorized the App before, so GitHub would send the browser straight
 // back, and the attacker's client would get a code for the victim. A
@@ -640,7 +640,7 @@ func TestAConsentThatTheBrowserOfTheLoginDidNotSendIsRefusedAndStoresNothing(t *
 	}
 }
 
-// R7: two logins in one browser, interleaved at every step, each reach
+// Two logins in one browser, interleaved at every step, each reach
 // their own client with their own code and state.
 func TestTwoLoginsInOneBrowserEachReachTheirOwnClient(t *testing.T) {
 	t.Parallel()

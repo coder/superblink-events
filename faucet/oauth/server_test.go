@@ -186,7 +186,7 @@ func TestClientCredentialsIssuesAShortAccessTokenForTheClientsResource(t *testin
 }
 
 // go-sdk's client credentials handler sends no resource and asks for every
-// scope of the 401 challenge (R4). Faucet gives such a request the client's
+// scope of the 401 challenge. Faucet gives such a request the client's
 // resource and the scopes that the client holds.
 func TestClientCredentialsGrantsTheScopesTheClientHoldsAndItsResource(t *testing.T) {
 	t.Parallel()
@@ -227,7 +227,7 @@ func TestClientCredentialsGrantsTheScopesTheClientHoldsAndItsResource(t *testing
 }
 
 // HTTP Basic authentication carries the client ID and secret URL-encoded
-// (RFC 6749 section 2.3.1), and faucet decodes them (R6). golang.org/x/oauth2,
+// (RFC 6749 section 2.3.1), and faucet decodes them. golang.org/x/oauth2,
 // which go-sdk uses, encodes them so.
 func TestClientCredentialsDecodesTheBasicCredentials(t *testing.T) {
 	t.Parallel()

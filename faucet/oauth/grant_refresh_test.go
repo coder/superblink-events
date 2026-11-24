@@ -18,7 +18,7 @@ import (
 // A refresh token comes again within 30 seconds of its first use when
 // requests in parallel send it, and is traded again. After that its use
 // ends the session, since one of its two holders is not the client. Two
-// processes that share a refresh token so log each other out (R14): the
+// processes that share a refresh token so log each other out: the
 // cost of rotation.
 func TestARefreshTokenTradesAgainFor30SecondsThenEndsItsSession(t *testing.T) {
 	t.Parallel()

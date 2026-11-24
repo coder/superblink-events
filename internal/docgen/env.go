@@ -22,9 +22,8 @@ var envReaders = []string{"getenv", "lookup"}
 // otherEnvReads are the variables that packages other than cmd/faucet may
 // read, which the settings table leaves out, with the reason.
 var otherEnvReads = map[string][]string{
-	// The scratch database of the Postgres tests, and CI, which makes a test
-	// fail when that database is missing.
-	"faucet/internal/pgtest": {"CI", "FAUCET_TEST_DATABASE_URL"},
+	// The server of the Postgres tests.
+	"internal/pgtest": {"FAUCET_TEST_DATABASE_URL"},
 	// The client secret of the end-to-end tests' service agent, which it
 	// takes from the environment so that it is not in the process list.
 	"cmd/faucet/internal/serviceagent": {"FAUCET_CLIENT_SECRET"},

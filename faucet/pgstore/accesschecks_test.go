@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/superblink-events/faucet/oauth"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // A use of a fresh access check that moves no last use writes no row, so
@@ -18,7 +19,7 @@ import (
 func TestAUseOfAnAccessCheckThatMovesNoLastUseWritesNoRow(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	now := time.Now().Truncate(time.Microsecond)
 	for _, stmt := range []string{

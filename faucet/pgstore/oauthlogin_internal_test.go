@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 
-	"github.com/coder/superblink-events/faucet/internal/pgtest"
 	"github.com/coder/superblink-events/faucet/pgstore/database"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // Only the check that a refresh token is not both used and retired means

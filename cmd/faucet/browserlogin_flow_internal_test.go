@@ -30,6 +30,7 @@ import (
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/oauth"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 const (
@@ -132,13 +133,7 @@ type browserServer struct {
 
 func newBrowserServer(t *testing.T, configure ...func(*faucet.Deps)) *browserServer {
 	t.Helper()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	db := newScratchDatabase(t, adminURL)
 	require.NoError(t, pgstore.Migrate(context.Background(), db))
 	store := pgstore.New(db)
@@ -325,7 +320,7 @@ func (s *browserServer) connect(ctx context.Context, t *testing.T, path string) 
 
 // The whole way in: an agent with no token gets a 401, finds faucet's login
 // server, sends the person to the consent page and through GitHub, redeems
-// its code with go-sdk's Basic-first token request (R6), and waits for an
+// its code with go-sdk's Basic-first token request, and waits for an
 // event of a repository that the person's GitHub login can read.
 func TestAnAgentLogsInThroughABrowserAndWaitsForAnEvent(t *testing.T) {
 	t.Parallel()
@@ -391,7 +386,7 @@ func (s *browserServer) accessToken(ctx context.Context, t *testing.T, path stri
 // A person who logged in through a browser is checked through the
 // Authorizer that run() composes. Once GitHub answered for a repository, the
 // next wait and poll answer from faucet's access checks, and every
-// subscription, which renews, asks GitHub again (R3).
+// subscription, which renews, asks GitHub again.
 func TestABrowserUserAsksGitHubOnceForReadsAndAtEveryRenewal(t *testing.T) {
 	t.Parallel()
 	key, err := faucet.NewWebhookKey(bytes.Repeat([]byte{1}, 32))

@@ -20,6 +20,7 @@ import (
 	"github.com/coder/quartz"
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // ../../faucet/oauth/testdata/k8s-* hold a token that a k3s v1.33.5 cluster
@@ -41,13 +42,7 @@ type k8sServer struct {
 
 func newK8sServer(t *testing.T) *k8sServer {
 	t.Helper()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	db := newScratchDatabase(t, adminURL)
 	require.NoError(t, pgstore.Migrate(context.Background(), db))
 	store := pgstore.New(db)

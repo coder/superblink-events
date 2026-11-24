@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/quartz"
-	"github.com/coder/superblink-events/faucet/internal/pgtest"
 	"github.com/coder/superblink-events/faucet/pgstore"
 	"github.com/coder/superblink-events/faucet/redelivery"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 const (
