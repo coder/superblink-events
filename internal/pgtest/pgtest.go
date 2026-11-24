@@ -1,4 +1,6 @@
-// Package pgtest gives a test its own Postgres database.
+// Package pgtest gives a test the Postgres server for tests and its own
+// database there. It sits at the module root so that cmd/faucet's tests take
+// it as faucet's do.
 package pgtest
 
 import (
@@ -15,18 +17,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NewDB creates a database on the server that FAUCET_TEST_DATABASE_URL names,
-// runs migrate on it and drops it when the test ends. Without the variable
-// the test is skipped, and in CI it fails.
+// URL returns the URL of the Postgres server for tests, which
+// FAUCET_TEST_DATABASE_URL names. Without the variable the test fails, on a
+// laptop as in CI: a skipped test reads as a pass, so a change that breaks
+// the store would look green. go test -short skips the test instead.
+func URL(t testing.TB) string {
+	t.Helper()
+	serverURL := os.Getenv("FAUCET_TEST_DATABASE_URL")
+	if serverURL == "" {
+		if testing.Short() {
+			t.Skip("-short skips the tests that need Postgres")
+		}
+		t.Fatal("set FAUCET_TEST_DATABASE_URL to a Postgres 13 or newer, for example postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable, or run go test -short to skip the tests that need it")
+	}
+	return serverURL
+}
+
+// NewDB creates a database on the server that URL names, runs migrate on it
+// and drops it when the test ends.
 func NewDB(t *testing.T, migrate func(context.Context, *sql.DB) error) *sql.DB {
 	t.Helper()
-	adminURL := os.Getenv("FAUCET_TEST_DATABASE_URL")
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatal("FAUCET_TEST_DATABASE_URL must be set in CI")
-		}
-		t.Skip("set FAUCET_TEST_DATABASE_URL to a Postgres URL")
-	}
+	adminURL := URL(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	suffix := make([]byte, 8)

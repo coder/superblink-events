@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // The statements of the build before the target lines migration, which keeps
@@ -31,7 +32,7 @@ VALUES ($1, 'octocat', $2, 'ci.run_completed', '{ci.run_completed}', $3::text::j
 
 func TestTheBuildBeforeTargetLinesKeepsTheLinesWhole(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	insertAsBefore := func(delivery string, repoID, ownerID int64) {
@@ -118,7 +119,7 @@ func TestTheBuildBeforeTargetLinesKeepsTheLinesWhole(t *testing.T) {
 // left, and gives each subscription the position of its cursor.
 func TestTheTargetLinesMigrationNumbersTheEventsAndSubscriptionsThatExist(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	ctx := context.Background()
 	runMigrationFile(t, db, "000018_target_lines.down.sql")
 	_, err := db.ExecContext(ctx, `SELECT setval('faucet_events_id_seq', 100)`)
@@ -180,7 +181,7 @@ func TestTheTargetLinesMigrationNumbersTheEventsAndSubscriptionsThatExist(t *tes
 // can have. Its purge must not fail the purge of every other event.
 func TestAPurgeOfAnEventWithNoValidRepositoryIDStillRuns(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, insertBeforeLines, "bad", -5, 0)

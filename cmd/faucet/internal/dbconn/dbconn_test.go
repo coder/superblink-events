@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/superblink-events/cmd/faucet/internal/dbconn"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 const fakePassword = "fake-db-password-7c1f4e"
@@ -76,14 +76,7 @@ func TestOpenAcceptsWellFormedConnectionStrings(t *testing.T) {
 // the server rejects them.
 func TestOpenPooledSendsByteParametersInBinary(t *testing.T) {
 	t.Parallel()
-	const env = "FAUCET_TEST_DATABASE_URL"
-	url := os.Getenv(env)
-	if url == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", env)
-		}
-		t.Skipf("set %s to a Postgres URL", env)
-	}
+	url := pgtest.URL(t)
 	keywords, err := pq.ParseURL(url)
 	require.NoError(t, err)
 

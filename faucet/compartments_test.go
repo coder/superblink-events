@@ -28,10 +28,10 @@ const module = "github.com/coder/superblink-events"
 // violation, and any other directory missing from adapters is a feature, so a
 // new helper or adapter fails closed.
 var (
-	internals = []string{"faucet/internal/githubapi", "faucet/internal/pgtest"}
+	internals = []string{"faucet/internal/githubapi", "internal/pgtest"}
 	// testHelpers are the internals that only test files import, so that no
 	// build of the server links testing and testify.
-	testHelpers = []string{"faucet/internal/pgtest"}
+	testHelpers = []string{"internal/pgtest"}
 	adapters    = []string{"faucet/pgstore", "faucet/pgstore/database", "faucet/storetest"}
 )
 
@@ -252,16 +252,37 @@ func skipped(name string) bool {
 	return name == "testdata" || strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".")
 }
 
-// parseLayout reads every Go file under the faucet directory, whatever its
-// build tags, with the identifiers that each file selects on its imports.
+// parseLayout reads every Go file under the faucet directory, and under each
+// helper in internals outside it, whatever its build tags, with the
+// identifiers that each file selects on its imports.
 func parseLayout(t *testing.T) []goPackage {
 	t.Helper()
 	byDir := map[string]*goPackage{}
-	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	// The walk runs in faucet/, so a module-relative directory outside it
+	// is one level up.
+	roots := []string{"."}
+	for _, dir := range internals {
+		if !strings.HasPrefix(dir, "faucet/") {
+			roots = append(roots, filepath.Join("..", filepath.FromSlash(dir)))
+		}
+	}
+	for _, root := range roots {
+		walkLayout(t, root, byDir)
+	}
+	var pkgs []goPackage
+	for _, p := range byDir {
+		pkgs = append(pkgs, *p)
+	}
+	return pkgs
+}
+
+func walkLayout(t *testing.T, root string, byDir map[string]*goPackage) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if path != "." && skipped(d.Name()) {
+		if path != root && skipped(d.Name()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -282,11 +303,6 @@ func parseLayout(t *testing.T) []goPackage {
 		return nil
 	})
 	require.NoError(t, err)
-	var pkgs []goPackage
-	for _, p := range byDir {
-		pkgs = append(pkgs, *p)
-	}
-	return pkgs
 }
 
 func importsOf(file *ast.File) []goImport {
@@ -336,7 +352,7 @@ func TestCompartmentRulesRejectEachBreach(t *testing.T) {
 	const (
 		core     = module + "/faucet"
 		helper   = module + "/faucet/internal/githubapi"
-		pgtest   = module + "/faucet/internal/pgtest"
+		pgtest   = module + "/internal/pgtest"
 		pgstore  = module + "/faucet/pgstore"
 		storet   = module + "/faucet/storetest"
 		feature  = module + "/faucet/redelivery"
@@ -356,7 +372,7 @@ func TestCompartmentRulesRejectEachBreach(t *testing.T) {
 				fileOf("githubapi.go", use(external, "New")),
 				fileOf("githubapi_test.go", use(helper, "Call")),
 			}},
-			{dir: "faucet/internal/pgtest", files: []goFile{fileOf("pgtest.go")}},
+			{dir: "internal/pgtest", files: []goFile{fileOf("pgtest.go")}},
 			{dir: "faucet/redelivery", files: []goFile{
 				fileOf("run.go", use(core, "StoresDelivery", "Event"), use(helper, "Call")),
 				fileOf("run_test.go", use(core, "Service"), use(feature, "New"), use(pgstore, "New"), use(storet, "RunRedelivery"), use(pgtest, "NewDB")),
@@ -433,8 +449,8 @@ func TestCompartmentRulesRejectEachBreach(t *testing.T) {
 			return slices.DeleteFunc(pkgs, func(p goPackage) bool { return p.dir == "faucet/storetest" })
 		}, "self-check: the adapter faucet/storetest does not exist"},
 		{"a listed helper is missing", func(pkgs []goPackage) []goPackage {
-			return slices.DeleteFunc(pkgs, func(p goPackage) bool { return p.dir == "faucet/internal/pgtest" })
-		}, "self-check: the helper faucet/internal/pgtest does not exist"},
+			return slices.DeleteFunc(pkgs, func(p goPackage) bool { return p.dir == "internal/pgtest" })
+		}, "self-check: the helper internal/pgtest does not exist"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

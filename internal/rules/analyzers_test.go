@@ -54,3 +54,13 @@ var s = "R6 in a string is no comment"
 	require.Equal(t, []string{"x.go:3: cites R14", "x.go:5: cites finding 5", "x.go:6: cites D4"}, outsideIDs([]sourceFile{parseSource(t, "x.go", src)}))
 	require.Empty(t, outsideIDs([]sourceFile{parseSource(t, "faucet/compartments_test.go", "package x\n\n// R7 forbids that.\n")}), "a file that defines its own IDs may cite them")
 }
+
+func TestTestDatabaseReads(t *testing.T) {
+	t.Parallel()
+	src := "package x\n\nimport \"os\"\n\nconst env = \"FAUCET_TEST_DATABASE_URL\"\n\nvar a, b = os.Getenv(env), os.Getenv(`FAUCET_TEST_DATABASE_URL`)\n\nvar c = \"set FAUCET_TEST_DATABASE_URL first\"\n"
+	require.Equal(t, []string{
+		"cmd/x_test.go:5: names FAUCET_TEST_DATABASE_URL: take the server from pgtest.URL(t) or a database from pgtest.NewDB(t, migrate) in internal/pgtest",
+		"cmd/x_test.go:7: names FAUCET_TEST_DATABASE_URL: take the server from pgtest.URL(t) or a database from pgtest.NewDB(t, migrate) in internal/pgtest",
+	}, testDatabaseReads([]sourceFile{parseSource(t, "cmd/x_test.go", src)}))
+	require.Empty(t, testDatabaseReads([]sourceFile{parseSource(t, "internal/pgtest/pgtest.go", src)}))
+}

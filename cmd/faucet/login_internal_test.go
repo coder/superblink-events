@@ -32,6 +32,7 @@ import (
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/oauth"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // loginServer is faucet as run() builds it with FAUCET_PUBLIC_URL set to the
@@ -88,13 +89,7 @@ func newLoginServer(t *testing.T, configure ...func(*loginConfig)) *loginServer 
 	for _, c := range configure {
 		c(&cfg)
 	}
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	db := newScratchDatabase(t, adminURL)
 	if cfg.maxOpenConns > 0 {
 		db.SetMaxOpenConns(cfg.maxOpenConns)

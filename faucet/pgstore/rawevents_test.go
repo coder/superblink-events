@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 const rawTestRepo = 42
@@ -84,7 +85,7 @@ func countRows(t *testing.T, db *sql.DB, table string) (n int) {
 // Purge account for every delivery.
 func TestExpireRawDeliveriesCountsEveryDeliveryThatLeavesTheQueue(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
@@ -120,7 +121,7 @@ func TestOpenRawLeaseKeepsItsLimitsAndEndsTheOldestLeaseWhileOneIsPolled(t *test
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			db := newDatabase(t, testDatabaseURL(t))
+			db := newDatabase(t, pgtest.URL(t))
 			store := pgstore.New(db)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -164,7 +165,7 @@ func TestOpenRawLeaseKeepsItsLimitsAndEndsTheOldestLeaseWhileOneIsPolled(t *test
 
 func TestRawStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	lockTables(t, db, "faucet_subscriptions", "faucet_raw_events", "faucet_raw_deliveries", "faucet_raw_gaps", "faucet_raw_leases", "faucet_raw_unread")
 
@@ -236,7 +237,7 @@ func TestRawStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 // earlier time even when its ingest waited for the lock.
 func TestIngestRawIsStampedWhenItIsWrittenNotWhenItsTransactionStarts(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

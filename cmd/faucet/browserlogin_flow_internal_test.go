@@ -30,6 +30,7 @@ import (
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/oauth"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 const (
@@ -132,13 +133,7 @@ type browserServer struct {
 
 func newBrowserServer(t *testing.T, configure ...func(*faucet.Deps)) *browserServer {
 	t.Helper()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	db := newScratchDatabase(t, adminURL)
 	require.NoError(t, pgstore.Migrate(context.Background(), db))
 	store := pgstore.New(db)

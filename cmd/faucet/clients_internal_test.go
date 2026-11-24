@@ -19,19 +19,14 @@ import (
 	"github.com/coder/superblink-events/faucet"
 	"github.com/coder/superblink-events/faucet/oauth"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
 // newClientsDatabase is a migrated scratch database and the environment that
 // names it.
 func newClientsDatabase(t *testing.T) (func(string) string, *pgstore.Store) {
 	t.Helper()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	databaseURL := newScratchDatabaseURL(t, adminURL)
 	db, err := dbconn.Open(databaseURL)
 	require.NoError(t, err)
@@ -241,10 +236,7 @@ func TestTheClientsCommandNeedsACurrentDatabase(t *testing.T) {
 	_, _, err := clients(t, func(string) string { return "" }, "list")
 	require.ErrorContains(t, err, envDatabaseURL)
 
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	unmigrated := newScratchDatabaseURL(t, adminURL)
 	_, _, err = clients(t, func(name string) string { return map[string]string{envDatabaseURL: unmigrated}[name] }, "list")
 	require.ErrorIs(t, err, pgstore.ErrSchemaNotCurrent, "the command never migrates")

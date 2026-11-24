@@ -6,16 +6,14 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"net/url"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/superblink-events/cmd/faucet/internal/dbconn"
 	"github.com/coder/superblink-events/faucet/pgstore"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
-
-const testDatabaseURLEnv = "FAUCET_TEST_DATABASE_URL"
 
 // A Vercel preview runs the code of any branch and can reach the same database
 // as production. Only production may change the schema, so a deployment of an
@@ -25,13 +23,7 @@ const testDatabaseURLEnv = "FAUCET_TEST_DATABASE_URL"
 // VERCEL_ENV cannot tell that it is in production and must not migrate.
 func TestPrepareSchemaMigratesOnlyInProduction(t *testing.T) {
 	t.Parallel()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	ctx := context.Background()
 	hasMigrationsTable := func(t *testing.T, db *sql.DB) (exists bool) {
 		t.Helper()
@@ -88,13 +80,7 @@ func TestPrepareSchemaMigratesOnlyInProduction(t *testing.T) {
 // around it, so the schema must land in the database that migrateURL names.
 func TestMigrateSchemaMigratesOverTheMigrationURL(t *testing.T) {
 	t.Parallel()
-	adminURL := os.Getenv(testDatabaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", testDatabaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL", testDatabaseURLEnv)
-	}
+	adminURL := pgtest.URL(t)
 	ctx := context.Background()
 	served := newScratchDatabase(t, adminURL)
 	migrateURL := newScratchDatabaseURL(t, adminURL)

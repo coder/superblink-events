@@ -27,16 +27,14 @@ import (
 	"github.com/coder/superblink-events/faucet/pgstore"
 	"github.com/coder/superblink-events/faucet/redelivery"
 	"github.com/coder/superblink-events/faucet/storetest"
+	"github.com/coder/superblink-events/internal/pgtest"
 )
 
-const (
-	databaseURLEnv = "FAUCET_TEST_DATABASE_URL"
-	maxTestConns   = 10
-)
+const maxTestConns = 10
 
 func TestStore(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 
 	storetest.Run(t, func(t *testing.T) faucet.Store {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -45,7 +43,7 @@ func TestStore(t *testing.T) {
 
 func TestRedeliveryStore(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 
 	storetest.RunRedelivery(t, func(t *testing.T) storetest.RedeliveryStore {
 		return newGapRecordingStore(newDatabase(t, adminURL))
@@ -54,7 +52,7 @@ func TestRedeliveryStore(t *testing.T) {
 
 func TestRawStore(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 
 	storetest.RunRaw(t, func(t *testing.T) storetest.RawStore {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -63,7 +61,7 @@ func TestRawStore(t *testing.T) {
 
 func TestOAuthStore(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 
 	storetest.RunOAuth(t, func(t *testing.T) oauth.Store {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -72,7 +70,7 @@ func TestOAuthStore(t *testing.T) {
 
 func TestOAuthStoreOverBinaryParameters(t *testing.T) {
 	t.Parallel()
-	adminURL := withBinaryParameters(t, testDatabaseURL(t))
+	adminURL := withBinaryParameters(t, pgtest.URL(t))
 
 	storetest.RunOAuth(t, func(t *testing.T) oauth.Store {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -85,7 +83,7 @@ func TestOAuthStoreOverBinaryParameters(t *testing.T) {
 func TestAnAccessTokenWithAnUnknownScopeIsRejectedNotAFailure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	token := "fct_" + strings.Repeat("A", 43)
 	hash := oauth.HashToken(token)
@@ -141,7 +139,7 @@ func (s gapRecordingStore) RecordedRedeliveryGaps(ctx context.Context) ([]redeli
 // binary, which a jsonb parameter cannot take, so the whole suite runs in it.
 func TestStoreOverBinaryParameters(t *testing.T) {
 	t.Parallel()
-	adminURL := withBinaryParameters(t, testDatabaseURL(t))
+	adminURL := withBinaryParameters(t, pgtest.URL(t))
 
 	storetest.Run(t, func(t *testing.T) faucet.Store {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -150,7 +148,7 @@ func TestStoreOverBinaryParameters(t *testing.T) {
 
 func TestRedeliveryStoreOverBinaryParameters(t *testing.T) {
 	t.Parallel()
-	adminURL := withBinaryParameters(t, testDatabaseURL(t))
+	adminURL := withBinaryParameters(t, pgtest.URL(t))
 
 	storetest.RunRedelivery(t, func(t *testing.T) storetest.RedeliveryStore {
 		return newGapRecordingStore(newDatabase(t, adminURL))
@@ -159,7 +157,7 @@ func TestRedeliveryStoreOverBinaryParameters(t *testing.T) {
 
 func TestRawStoreOverBinaryParameters(t *testing.T) {
 	t.Parallel()
-	adminURL := withBinaryParameters(t, testDatabaseURL(t))
+	adminURL := withBinaryParameters(t, pgtest.URL(t))
 
 	storetest.RunRaw(t, func(t *testing.T) storetest.RawStore {
 		return pgstore.New(newDatabase(t, adminURL))
@@ -171,7 +169,7 @@ func TestRawStoreOverBinaryParameters(t *testing.T) {
 // transaction starts breaks that for an insert that then waits for the lock.
 func TestInsertEventIsStampedWhenItIsWrittenNotWhenItsTransactionStarts(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -205,7 +203,7 @@ func TestInsertEventIsStampedWhenItIsWrittenNotWhenItsTransactionStarts(t *testi
 
 func TestMigrateLeavesHostMigrationsTableAlone(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 	db := createDatabase(t, adminURL)
 	ctx := context.Background()
 
@@ -230,7 +228,7 @@ func TestMigrateLeavesHostMigrationsTableAlone(t *testing.T) {
 // events empty.
 func TestTheRawEventsMigrationGoesDownAndUpAroundTheEventLog(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	// The owner targets migration adds columns to the raw tables, so it goes
@@ -324,7 +322,7 @@ func runMigrationFile(t *testing.T, db *sql.DB, name string) {
 // repository, and an up reads those as repo targets.
 func TestTheOwnerTargetsMigrationGoesDownToRepositoryRowsAndUpAgain(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
@@ -403,7 +401,7 @@ func TestTheOwnerTargetsMigrationGoesDownToRepositoryRowsAndUpAgain(t *testing.T
 // reads as no grant.
 func TestTheOrgGrantsMigrationBindsEachLoginToTheAccountThatHoldsItAndBack(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "Coder"}))
@@ -449,7 +447,7 @@ func TestTheOrgGrantsMigrationBindsEachLoginToTheAccountThatHoldsItAndBack(t *te
 // up keeps every account that the down kept.
 func TestTheOwnerQuarantineMigrationDropsQuarantinedAccountsDownAndKeepsTheRestUp(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	require.NoError(t, store.RecordOwner(ctx, faucet.Owner{ID: 7, Login: "acme"}))
@@ -483,7 +481,7 @@ func TestTheOwnerQuarantineMigrationDropsQuarantinedAccountsDownAndKeepsTheRestU
 // any step.
 func TestTheWorkloadTrustsMigrationKeepsAClientWithNoSecretWithoutOneDownAndUp(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	const resource = "https://faucet.example.com/github/mcp"
@@ -557,7 +555,7 @@ func TestTheWorkloadTrustsMigrationKeepsAClientWithNoSecretWithoutOneDownAndUp(t
 // holds them. A lax path would unwrap an array and pass it.
 func TestATrustRuleHoldsClaimsOfStringsOnly(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `INSERT INTO faucet_service_clients (client_id, secret_hash, resource, grants, scopes, created_at)
 		VALUES ('digest-bot', NULL, 'https://faucet.example.com/github/mcp', '{repo:coder/faucet}', '{events:read}', now())`)
@@ -575,7 +573,7 @@ func TestATrustRuleHoldsClaimsOfStringsOnly(t *testing.T) {
 
 func TestTheClearMigrationMovesTheOldTopToTheClearAndBack(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 	const hook = "/orgs/acme/hooks/7"
@@ -641,18 +639,6 @@ func TestTheClearMigrationMovesTheOldTopToTheClearAndBack(t *testing.T) {
 	require.True(t, attempt.Equal(storedTop().Time), "a scan that has read an attempt keeps that attempt's time, not the Date")
 }
 
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	adminURL := os.Getenv(databaseURLEnv)
-	if adminURL == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("%s must be set in CI", databaseURLEnv)
-		}
-		t.Skipf("set %s to a Postgres URL, for example postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable", databaseURLEnv)
-	}
-	return adminURL
-}
-
 func withBinaryParameters(t *testing.T, rawURL string) string {
 	t.Helper()
 	u, err := url.Parse(rawURL)
@@ -713,7 +699,7 @@ func createDatabase(t *testing.T, adminURL string) *sql.DB {
 
 func TestCheckSchemaAcceptsOnlyTheNewestVersionAndWritesNothing(t *testing.T) {
 	t.Parallel()
-	adminURL := testDatabaseURL(t)
+	adminURL := pgtest.URL(t)
 	ctx := context.Background()
 	setVersion := func(t *testing.T, db *sql.DB, version int, dirty bool) {
 		t.Helper()
@@ -766,7 +752,7 @@ func TestCheckSchemaAcceptsOnlyTheNewestVersionAndWritesNothing(t *testing.T) {
 // for two purges.
 func TestPurgeThatWaitsForAnotherPurgeHoldsNoEventRow(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	ctx := context.Background()
 
@@ -818,7 +804,7 @@ func TestPurgeThatWaitsForAnotherPurgeHoldsNoEventRow(t *testing.T) {
 
 func TestStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
@@ -851,7 +837,7 @@ func TestStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 
 func TestRedeliveryStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
@@ -898,7 +884,7 @@ func TestRedeliveryStoreCallThatItsContextCutShortWrapsTheContextError(t *testin
 
 func TestOAuthStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
@@ -962,7 +948,7 @@ func TestOAuthStoreCallThatItsContextCutShortWrapsTheContextError(t *testing.T) 
 
 func TestRepositoryCallThatItsContextCutShortWrapsTheContextError(t *testing.T) {
 	t.Parallel()
-	db := newDatabase(t, testDatabaseURL(t))
+	db := newDatabase(t, pgtest.URL(t))
 	store := pgstore.New(db)
 	tx, err := db.BeginTx(context.Background(), nil)
 	require.NoError(t, err)
