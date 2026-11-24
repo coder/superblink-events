@@ -7,12 +7,14 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
-const addOwner = `-- name: AddOwner :exec
+const addOwner = `-- name: AddOwner :execrows
 INSERT INTO faucet_owners (owner_id, login)
-VALUES ($1, $2)
+SELECT $1::bigint, $2::text
+WHERE NOT EXISTS (SELECT 1 FROM faucet_owners WHERE lower(login) = lower($2::text))
 ON CONFLICT DO NOTHING
 `
 
@@ -21,44 +23,60 @@ type AddOwnerParams struct {
 	Login   string
 }
 
-// An account that holds a row, or a login that another account holds, makes
-// it write nothing.
-func (q *Queries) AddOwner(ctx context.Context, arg AddOwnerParams) error {
-	_, err := q.db.ExecContext(ctx, addOwner, arg.OwnerID, arg.Login)
-	return err
+// An account that holds a row, or a login that a row holds or held before
+// its quarantine, makes it write nothing.
+func (q *Queries) AddOwner(ctx context.Context, arg AddOwnerParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addOwner, arg.OwnerID, arg.Login)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getOwnerByID = `-- name: GetOwnerByID :one
-SELECT owner_id, login
+SELECT owner_id, login, (quarantined_at IS NOT NULL)::boolean AS quarantined
 FROM faucet_owners
 WHERE owner_id = $1
 `
 
-func (q *Queries) GetOwnerByID(ctx context.Context, ownerID int64) (FaucetOwner, error) {
+type GetOwnerByIDRow struct {
+	OwnerID     int64
+	Login       string
+	Quarantined bool
+}
+
+func (q *Queries) GetOwnerByID(ctx context.Context, ownerID int64) (GetOwnerByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getOwnerByID, ownerID)
-	var i FaucetOwner
-	err := row.Scan(&i.OwnerID, &i.Login)
+	var i GetOwnerByIDRow
+	err := row.Scan(&i.OwnerID, &i.Login, &i.Quarantined)
 	return i, err
 }
 
 const getOwnerByLogin = `-- name: GetOwnerByLogin :one
 SELECT owner_id, login
 FROM faucet_owners
-WHERE lower(login) = lower($1::text)
+WHERE lower(login) = lower($1::text) AND quarantined_at IS NULL
 `
 
-func (q *Queries) GetOwnerByLogin(ctx context.Context, login string) (FaucetOwner, error) {
+type GetOwnerByLoginRow struct {
+	OwnerID int64
+	Login   string
+}
+
+func (q *Queries) GetOwnerByLogin(ctx context.Context, login string) (GetOwnerByLoginRow, error) {
 	row := q.db.QueryRowContext(ctx, getOwnerByLogin, login)
-	var i FaucetOwner
+	var i GetOwnerByLoginRow
 	err := row.Scan(&i.OwnerID, &i.Login)
 	return i, err
 }
 
 const getRepositoryByName = `-- name: GetRepositoryByName :one
-SELECT r.repo_id, r.owner_id, o.login AS owner_login, (o.login || '/' || split_part(r.full_name, '/', 2))::text AS full_name
+SELECT r.repo_id, r.owner_id, o.login AS owner_login, (o.login || '/' || split_part(r.full_name, '/', 2))::text AS full_name,
+       (r.quarantined_at IS NOT NULL)::boolean AS quarantined
 FROM faucet_owners o
 JOIN faucet_repos r ON r.owner_id = o.owner_id
-WHERE lower(o.login) = lower($1::text) AND lower(split_part(r.full_name, '/', 2)) = lower($2::text)
+WHERE lower(o.login) = lower($1::text) AND o.quarantined_at IS NULL
+  AND lower(split_part(r.full_name, '/', 2)) = lower($2::text)
 ORDER BY r.seen_at DESC, r.repo_id DESC
 LIMIT 1
 `
@@ -69,14 +87,17 @@ type GetRepositoryByNameParams struct {
 }
 
 type GetRepositoryByNameRow struct {
-	RepoID     int64
-	OwnerID    int64
-	OwnerLogin string
-	FullName   string
+	RepoID      int64
+	OwnerID     int64
+	OwnerLogin  string
+	FullName    string
+	Quarantined bool
 }
 
 // The owner part of the name is the login of the account that holds it now,
 // and the name part is the one that the row was first seen or renamed under.
+// A quarantined row resolves no name, so the caller refuses it rather than
+// take an older row that held the name.
 func (q *Queries) GetRepositoryByName(ctx context.Context, arg GetRepositoryByNameParams) (GetRepositoryByNameRow, error) {
 	row := q.db.QueryRowContext(ctx, getRepositoryByName, arg.OwnerLogin, arg.Name)
 	var i GetRepositoryByNameRow
@@ -85,14 +106,92 @@ func (q *Queries) GetRepositoryByName(ctx context.Context, arg GetRepositoryByNa
 		&i.OwnerID,
 		&i.OwnerLogin,
 		&i.FullName,
+		&i.Quarantined,
 	)
 	return i, err
+}
+
+const lockName = `-- name: LockName :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Holds a lock of the account or the repository that key names until the
+// transaction ends, so that GitHub's answers for one are written in the order
+// in which they were asked.
+func (q *Queries) LockName(ctx context.Context, key string) error {
+	_, err := q.db.ExecContext(ctx, lockName, key)
+	return err
+}
+
+const lockRepositoryHolding = `-- name: LockRepositoryHolding :one
+SELECT (lower(r.full_name) = lower($1::text) OR EXISTS (
+     SELECT 1 FROM faucet_owners o
+     WHERE o.owner_id = r.owner_id
+       AND lower(o.login || '/' || split_part(r.full_name, '/', 2)) = lower($1::text)
+   ))::boolean AS holds_from,
+   (r.quarantined_at IS NOT NULL)::boolean AS quarantined
+FROM faucet_repos r
+WHERE r.repo_id = $2
+FOR UPDATE OF r
+`
+
+type LockRepositoryHoldingParams struct {
+	FromFullName string
+	RepoID       int64
+}
+
+type LockRepositoryHoldingRow struct {
+	HoldsFrom   bool
+	Quarantined bool
+}
+
+// holds_from says whether the row's full name is @from_full_name, as the row
+// holds it or under the login that the row's owner holds now. GitHub writes
+// the name from under the owner's login now, which the row lacks when the
+// owner was renamed after the row was first seen.
+func (q *Queries) LockRepositoryHolding(ctx context.Context, arg LockRepositoryHoldingParams) (LockRepositoryHoldingRow, error) {
+	row := q.db.QueryRowContext(ctx, lockRepositoryHolding, arg.FromFullName, arg.RepoID)
+	var i LockRepositoryHoldingRow
+	err := row.Scan(&i.HoldsFrom, &i.Quarantined)
+	return i, err
+}
+
+const quarantineOwner = `-- name: QuarantineOwner :exec
+UPDATE faucet_owners SET quarantined_at = COALESCE(quarantined_at, now())
+WHERE owner_id = $1 OR (lower(login) = lower($2::text) AND quarantined_at IS NULL)
+`
+
+type QuarantineOwnerParams struct {
+	OwnerID int64
+	Login   string
+}
+
+// The account and the account that holds the login, if any, hold no login.
+func (q *Queries) QuarantineOwner(ctx context.Context, arg QuarantineOwnerParams) error {
+	_, err := q.db.ExecContext(ctx, quarantineOwner, arg.OwnerID, arg.Login)
+	return err
+}
+
+const quarantineRepository = `-- name: QuarantineRepository :exec
+UPDATE faucet_repos
+SET quarantined_at = COALESCE(quarantined_at, $1)
+WHERE repo_id = $2
+`
+
+type QuarantineRepositoryParams struct {
+	SeenAt sql.NullTime
+	RepoID int64
+}
+
+func (q *Queries) QuarantineRepository(ctx context.Context, arg QuarantineRepositoryParams) error {
+	_, err := q.db.ExecContext(ctx, quarantineRepository, arg.SeenAt, arg.RepoID)
+	return err
 }
 
 const recordOwner = `-- name: RecordOwner :exec
 INSERT INTO faucet_owners (owner_id, login)
 VALUES ($1, $2)
-ON CONFLICT (owner_id) DO UPDATE SET login = excluded.login
+ON CONFLICT (owner_id) DO UPDATE SET login = excluded.login, quarantined_at = NULL
 `
 
 type RecordOwnerParams struct {
@@ -130,8 +229,30 @@ func (q *Queries) RecordRepository(ctx context.Context, arg RecordRepositoryPara
 	return err
 }
 
+const recordRepositoryRename = `-- name: RecordRepositoryRename :execrows
+INSERT INTO faucet_repo_renames (body_sha256, repo_id, seen_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (body_sha256) DO NOTHING
+`
+
+type RecordRepositoryRenameParams struct {
+	BodySha256 []byte
+	RepoID     int64
+	SeenAt     time.Time
+}
+
+// A body that the store judged before writes nothing.
+func (q *Queries) RecordRepositoryRename(ctx context.Context, arg RecordRepositoryRenameParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordRepositoryRename, arg.BodySha256, arg.RepoID, arg.SeenAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const releaseOwnerLogin = `-- name: ReleaseOwnerLogin :exec
-DELETE FROM faucet_owners WHERE lower(login) = lower($1::text) AND owner_id <> $2
+UPDATE faucet_owners SET quarantined_at = now()
+WHERE lower(login) = lower($1::text) AND owner_id <> $2 AND quarantined_at IS NULL
 `
 
 type ReleaseOwnerLoginParams struct {
@@ -139,8 +260,9 @@ type ReleaseOwnerLoginParams struct {
 	OwnerID int64
 }
 
-// Another account that held the login gives it up, because one login names
-// one account.
+// Another account that holds the login gives it up, because one login names
+// one account. It keeps its row, quarantined, so that its next delivery asks
+// GitHub for its login.
 func (q *Queries) ReleaseOwnerLogin(ctx context.Context, arg ReleaseOwnerLoginParams) error {
 	_, err := q.db.ExecContext(ctx, releaseOwnerLogin, arg.Login, arg.OwnerID)
 	return err
@@ -151,24 +273,16 @@ INSERT INTO faucet_repos (repo_id, owner_id, owner_login, full_name, seen_at)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (repo_id) DO UPDATE
 SET owner_id = excluded.owner_id, owner_login = excluded.owner_login,
-    full_name = excluded.full_name, seen_at = excluded.seen_at
-WHERE lower(faucet_repos.full_name) = lower($6::text)
-   -- GitHub writes from under the owner's login now, which the row lacks when
-   -- the owner was renamed after the row was first seen.
-   OR EXISTS (
-     SELECT 1 FROM faucet_owners o
-     WHERE o.owner_id = faucet_repos.owner_id
-       AND lower(o.login || '/' || split_part(faucet_repos.full_name, '/', 2)) = lower($6::text)
-   )
+    full_name = excluded.full_name, seen_at = excluded.seen_at,
+    quarantined_at = NULL
 `
 
 type RenameRepositoryParams struct {
-	RepoID           int64
-	OwnerID          int64
-	OwnerLogin       string
-	FullName         string
-	SeenAt           time.Time
-	PreviousFullName string
+	RepoID     int64
+	OwnerID    int64
+	OwnerLogin string
+	FullName   string
+	SeenAt     time.Time
 }
 
 func (q *Queries) RenameRepository(ctx context.Context, arg RenameRepositoryParams) error {
@@ -178,7 +292,6 @@ func (q *Queries) RenameRepository(ctx context.Context, arg RenameRepositoryPara
 		arg.OwnerLogin,
 		arg.FullName,
 		arg.SeenAt,
-		arg.PreviousFullName,
 	)
 	return err
 }

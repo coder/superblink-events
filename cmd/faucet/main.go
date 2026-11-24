@@ -433,6 +433,8 @@ func newServices(cfg config, store *pgstore.Store, checks access, clock quartz.C
 		// login server finds by the deliveries that named them.
 		RecordRepositories: true,
 		Redelivered:        store.Redelivered,
+		GitHubAPIURL:       cfg.githubAPI,
+		GitHubClient:       &http.Client{Timeout: githubTimeout},
 	})
 	if err != nil {
 		return nil, nil, xerrors.Errorf("create service: %w", err)
@@ -440,7 +442,7 @@ func newServices(cfg config, store *pgstore.Store, checks access, clock quartz.C
 	if cfg.hookAdmin == nil {
 		return svc, nil, nil
 	}
-	redeliverer, err := redelivery.New(redelivery.Deps{Store: store, Hooks: cfg.hookAdmin, Clock: clock, Logger: logger, Wants: svc.RawWants})
+	redeliverer, err := redelivery.New(redelivery.Deps{Store: store, Hooks: cfg.hookAdmin, Clock: clock, Logger: logger, Wants: svc.RedeliveryWants})
 	if err != nil {
 		return nil, nil, xerrors.Errorf("create service: redelivery: %w", err)
 	}

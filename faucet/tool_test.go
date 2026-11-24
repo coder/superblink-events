@@ -279,7 +279,10 @@ func TestNewRequiresCollaborators(t *testing.T) {
 		"authorizer":     func(d *faucet.Deps) { d.Authorizer = nil },
 		"principal from": func(d *faucet.Deps) { d.PrincipalFrom = nil },
 		"clock":          func(d *faucet.Deps) { d.Clock = nil },
-		"redelivered":    func(d *faucet.Deps) { d.RecordRepositories = true },
+		"redelivered": func(d *faucet.Deps) {
+			d.RecordRepositories, d.GitHubAPIURL = true, "https://api.github.com"
+		},
+		"github api url": func(d *faucet.Deps) { d.RecordRepositories, d.Redelivered = true, noRedeliveries },
 	} {
 		deps := testDeps(&fakeStore{})
 		mutate(&deps)

@@ -91,8 +91,9 @@ type FaucetEventLine struct {
 }
 
 type FaucetOwner struct {
-	OwnerID int64
-	Login   string
+	OwnerID       int64
+	Login         string
+	QuarantinedAt sql.NullTime
 }
 
 type FaucetPurgeMark struct {
@@ -192,10 +193,17 @@ type FaucetRefreshToken struct {
 }
 
 type FaucetRepo struct {
+	RepoID        int64
+	OwnerID       int64
+	OwnerLogin    string
+	FullName      string
+	SeenAt        time.Time
+	QuarantinedAt sql.NullTime
+}
+
+type FaucetRepoRename struct {
+	BodySha256 []byte
 	RepoID     int64
-	OwnerID    int64
-	OwnerLogin string
-	FullName   string
 	SeenAt     time.Time
 }
 

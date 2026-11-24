@@ -207,6 +207,29 @@ describe('service accounts', () => {
     });
   });
 
+  test('a delivery sent again under a new GUID gives a renamed owner no old login back', async ({ faucet, hooks }) => {
+    await faucet.withFaucet({}, async (started) => {
+      const repoId = newRepoId();
+      const ownerId = newRepoId();
+      const [old, renamed] = [`vold${ownerId}`, `vnew${ownerId}`];
+      const naming = (login: string) =>
+        JSON.stringify({ ref: 'refs/heads/main', repository: { id: repoId, full_name: `${login}/tap`, owner: { id: ownerId, login } } });
+      const deliver = async (body: string) => expect((await started.deliver({ event: 'push', delivery: newDeliveryId(), body })).status).toBe(202);
+      const login = () => started.sql(`select login from faucet_owners where owner_id = ${ownerId} and quarantined_at is null`);
+
+      const kept = naming(old);
+      await deliver(kept);
+      expect(await login()).toBe(old);
+      await hooks.account(ownerId, renamed);
+      await deliver(naming(renamed));
+      expect(await login(), 'GitHub gave the account its new login').toBe(renamed);
+      await deliver(kept);
+      expect(await login(), 'within the minute faucet asks no more, so the account holds no login').toBe('');
+      expect(await started.sql(`select count(*) from faucet_owners where lower(login) = '${old}' and quarantined_at is null`)).toBe('0');
+      expect(await hooks.accountAsks(ownerId), 'faucet asked GitHub once, with no token').toEqual(['none']);
+    });
+  });
+
   test('every 401 names the metadata of its path, and /mcp has its own', async ({ faucet }) => {
     await faucet.withFaucet({}, async (started) => {
       for (const path of ['/github/mcp', '/mcp'] as const) {
