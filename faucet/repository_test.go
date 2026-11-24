@@ -16,8 +16,8 @@ import (
 	"cdr.dev/slog/v3"
 	"cdr.dev/slog/v3/sloggers/sloghuman"
 
-	"github.com/coder/faucet/faucet"
 	"github.com/coder/quartz"
+	"github.com/coder/superblink-events/faucet"
 )
 
 func newRepositoryHarness(t *testing.T, mutate ...func(*faucet.Deps)) (*fakeStore, *quartz.Mock, http.Handler) {
