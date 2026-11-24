@@ -13,3 +13,24 @@ Superblink Events is a Go library with a thin server (`cmd/faucet`). Read `READM
 - The scan takes no read bound and no gap from Superblink Events' clock (see #26). That clock is only the time of record that a step gives the store (`ScanStep.Now`). A read bound comes from an attempt time, and a `Date` can only lower it (the first run after an empty list or the migration); the types in `faucet/redelivery/time.go` enforce it. A gap ends at a page `Date` that passed the check (not more than S = 1h behind the newest attempt known), and a gap after a silence starts at the stored `Date` less M = 6h. M and S are the trust window (see docs/redelivery.md, known limits); a change to them needs a design review first.
 - No selection shortcut that skips, suppresses or merges an overlap read or an open range (see #22).
 - A trust rule for an issuer that serves many tenants (Vercel) pins the tenant's ID, never a name, and Superblink Events never trusts the issuer that every tenant shares (`https://oidc.vercel.com`). Superblink Events refuses GitHub Actions and gitlab.com until a test logs in with their real tokens. A platform's token logs in only through the token exchange grant (RFC 8693), never as a client assertion. The issuer profiles in `faucet/oauth/workload.go` enforce the first two: add a profile instead of loosening one.
+
+## Rules and what enforces them
+
+Each rule names the check that fails when a change breaks it. A rule marked "review" is a judgment call that no check can make. When the operator corrects an agent, fix the mistake and add the rule here. A rule that is already here, that nothing enforces and that is broken again is a repeat: give it a check (or a type, or a design that rules the mistake out) in the same change. Drop a rule once its mistake cannot happen.
+
+| Rule | Enforced by |
+|---|---|
+| A behaviour or number that a doc states changes with the doc in the same PR | `TestGeneratedTablesAreCurrent`, `TestDocsNameWhatExists`, `TestPicturesMatchTheirSource` (internal/docgen), the number pins (`faucet/docs_internal_test.go`, `cmd/faucet/docs_internal_test.go`, `faucet/redelivery/docs_test.go`), the Mermaid check in `verify/`; prose and `.agents/skills/` text: review |
+| A test that needs Postgres takes the server from `internal/pgtest`, and fails without one (`go test -short` skips it) | `pgtest.URL`, `TestOnlyPgtestReadsTheTestDatabaseVariable` (internal/rules) |
+| A test never sleeps in real time; it waits for the event, or runs in a `synctest.Test` bubble | `TestNoTestAddsASleepInRealTime` (internal/rules), a ratchet over the sleeps that remain |
+| A comment says the rule or reason itself, never the ID of a finding or plan item outside the repository | `TestNoCommentCitesAnIDFromOutsideTheRepository` (internal/rules) |
+| Feature compartments under `faucet/` | `TestCompartments` |
+| Generated queries are committed | CI `generate` job (`go -C tools tool sqlc generate -f ../sqlc.yaml`) |
+| Migrations are numbered 1 to N with no gap | `TestTheMigrationsAreNumberedOneToNWithNoGap` |
+| Every list in a tool's input schema declares `maxItems` | `TestEveryListInAnInputSchemaDeclaresMaxItems` |
+| Logging goes through `cdr.dev/slog/v3`, never `log/slog` | depguard in `.golangci.yaml` |
+| Redelivery takes read positions and bounds from GitHub's times, never from Superblink Events' clock | the types in `faucet/redelivery/time.go`, `TestOnlyRedeliverTimeMakesTheTimesThatTheScanKeepsApart` |
+| The trust window M and S changes only after a design review | `TestRedeliveryDocStatesTheDateWindowThatTheConstantsGive` pins the docs; the design review: review |
+| Redelivery selection keeps persisted state, and takes no shortcut that skips, suppresses or merges an overlap read or an open range | review |
+| A multi-tenant issuer's rule pins the tenant ID; GitHub Actions and gitlab.com stay refused | the issuer profiles in `faucet/oauth/workload.go`, `TestFaucetTrustsOnlyTheIssuerOfOneVercelTeam`, `TestFaucetRefusesARuleForGitHubActionsOrGitLab` |
+| A platform's token logs in only through the token exchange grant, never as a client assertion | `TestATokenExchangeCarriesNoSecretAndNoActor` refuses a client assertion in the exchange; the other grants: review |
