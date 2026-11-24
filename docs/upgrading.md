@@ -2,6 +2,15 @@
 
 The server applies every schema change at start (on Vercel, in production only, see [deploy.md](deploy.md#previews-are-off-on-purpose)). This page lists what else an upgrade asks of you.
 
+## To Superblink Events in the server's output
+
+This came in [#94](https://github.com/coder/superblink-events/pull/94). It needs no migration, and settings, routes, tokens and sealed values do not change. What the server shows and sends says Superblink Events instead of Superblink Events:
+
+- Webhook deliveries send `User-Agent: superblink-events-webhook`, and handshakes `superblink-events-webhook-verification`. A receiver that matches the old value must change.
+- Calls to GitHub send `User-Agent: coder-superblink-events`.
+- The MCP server's `serverInfo` names `superblink-events`, with the title `Superblink Events`.
+- Error messages, log lines and the login pages name Superblink Events. A log query that matches the old text must change.
+
 ## To the module path `github.com/coder/superblink-events`
 
 This came in [#81](https://github.com/coder/superblink-events/pull/81). It needs no migration, and the server, its settings and its routes do not change. A host that embeds Superblink Events imports `github.com/coder/superblink-events/faucet` and the packages under it instead of `github.com/coder/faucet/...`. The package names stay the same.
